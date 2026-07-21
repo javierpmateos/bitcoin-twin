@@ -248,12 +248,18 @@ def run_simulation(agents: list[Agent], backend, new_version: str,
     print(f"\nFin. Adopción final: {adopted / n:.1%} "
           f"({never} nodos 'zombies' que nunca actualizan)")
     print(f"Curva emergente guardada en {log_path}")
-    print("Compararla contra la curva real del ingestor = tarea del "
-          "validador (siguiente pieza).")
+    print("Compararla contra la curva real: validator.py compare --sim ...")
 
 
 def cmd_run(args) -> None:
-    profiles = default_profiles()   # TODO: cargar perfiles calibrados (JSON)
+    if args.profiles:
+        from validator import load_profiles
+        profiles = load_profiles(args.profiles)
+        print(f"Perfiles calibrados cargados de {args.profiles}")
+    else:
+        profiles = default_profiles()
+        print("Usando perfiles default (sin calibrar). Para usar perfiles "
+              "calibrados: validator.py calibrate y luego --profiles.")
     rng = np.random.default_rng(args.seed)
     agents = make_population(profiles, args.nodes, rng)
     backend = BACKENDS[args.backend]()
@@ -285,6 +291,8 @@ def main() -> None:
     p.add_argument("--security", action="store_true",
                    help="el release corrige un CVE")
     p.add_argument("--backend", default="dry-run", choices=BACKENDS)
+    p.add_argument("--profiles", default=None,
+                   help="JSON de perfiles calibrados (validator.py calibrate)")
     p.add_argument("--tick-seconds", type=float, default=0.0,
                    help="pausa real entre días simulados (0 = a fondo)")
     p.add_argument("--out", default="adoption_sim.csv")
