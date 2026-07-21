@@ -47,14 +47,20 @@ import re
 import sqlite3
 import sys
 import time
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
-BITNODES_LATEST = "https://bitnodes.io/api/v1/snapshots/latest/"
+# bitnodes.io murió el 3 de mayo de 2026 (el dominio expiró tras 13 años).
+# Fuente actual: bitnod.es, el crawler de reemplazo lanzado por BitMEX
+# Research. No expone API JSON; parseamos su tabla HTML de user agents,
+# que es estable porque cada fila enlaza al node explorer con el user
+# agent codificado en la URL. Un request por día es más que suficiente.
+BITNODES_ALT = "https://bitnod.es/"
 GITHUB_RELEASE = ("https://api.github.com/repos/bitcoin/bitcoin/"
                   "releases/tags/v{v}")
 DB_PATH = "telemetry.db"
-UA_HEADER = {"User-Agent": "adoption-twin-ingest/0.1"}
+UA_HEADER = {"User-Agent": "adoption-twin-ingest/0.2 (research project)"}
 
 # '/Satoshi:29.0.0/'  -> Core 29.0.0
 # '/Satoshi:27.1.0/Knots:20240801/' -> Knots 27.1.0
@@ -138,18 +144,53 @@ def http_json(url: str) -> dict:
         return json.loads(r.read().decode())
 
 
-def fetch_latest_snapshot() -> tuple[int, int, dict[tuple[str, str], int]]:
-    """Baja el último snapshot y lo reduce a conteos por versión."""
-    data = http_json(BITNODES_LATEST)
-    ts = int(data["timestamp"])
-    nodes = data.get("nodes", {})
+def http_text(url: str) -> str:
+    req = urllib.request.Request(url, headers=UA_HEADER)
+    with urllib.request.urlopen(req, timeout=120) as r:
+        return r.read().decode("utf-8", errors="replace")
+
+
+def parse_bitnodes_alt_html(html: str) -> dict[tuple[str, str], int]:
+    """
+    Extrae (implementación, versión) -> conteo de la tabla de user agents
+    de bitnod.es. Estrategia: solo filas cuyo user agent viene codificado
+    en un link al node explorer (filter=user_agent=...), que son las filas
+    de user agents EXACTOS; las filas agregadas (/Satoshi:29.*) no tienen
+    ese link, así que no hay doble conteo. El conteo es la primera celda
+    numérica que sigue en la misma fila.
+    """
     counts: dict[tuple[str, str], int] = {}
-    for _, fields in nodes.items():
-        # fields = [protocol, user_agent, connected_since, ...]
-        ua = fields[1] if len(fields) > 1 else ""
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I)
+    for row in rows:
+        m = re.search(r"filter=user_agent=([^&\"'\s]+)", row)
+        if not m:
+            continue
+        ua = urllib.parse.unquote_plus(m.group(1))
+        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)
+        count = None
+        for cell in cells:
+            text = re.sub(r"<[^>]+>", "", cell).strip()
+            if re.fullmatch(r"[\d,]+", text):
+                count = int(text.replace(",", ""))
+                break
+        if count is None:
+            continue
         key = parse_user_agent(ua)
-        counts[key] = counts.get(key, 0) + 1
-    return ts, len(nodes), counts
+        counts[key] = counts.get(key, 0) + count
+    return counts
+
+
+def fetch_latest_snapshot() -> tuple[int, int, dict[tuple[str, str], int]]:
+    """Baja la página principal de bitnod.es y la reduce a conteos."""
+    html = http_text(BITNODES_ALT)
+    counts = parse_bitnodes_alt_html(html)
+    if not counts:
+        raise RuntimeError(
+            "No pude extraer user agents de bitnod.es: el HTML cambió de "
+            "estructura. Revisá parse_bitnodes_alt_html().")
+    ts = int(time.time())
+    total = sum(counts.values())
+    return ts, total, counts
 
 
 def mock_snapshot(ts: int | None = None):
@@ -227,7 +268,7 @@ def cmd_ingest(args) -> None:
         origen = "mock"
     else:
         ts, total, counts = fetch_latest_snapshot()
-        origen = "bitnodes"
+        origen = "bitnod.es"
     nuevo = store_snapshot(con, ts, total, counts)
     when = datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
     estado = "guardado" if nuevo else "ya existía, ignorado"

@@ -68,29 +68,45 @@ WARNET_IMAGE = "bitcoindevproject/bitcoin:{version}"
 
 def mainnet_version_distribution(con: sqlite3.Connection,
                                  impl: str = "core",
-                                 top_k: int = 5) -> list[tuple[str, float]]:
+                                 top_k: int = 8) -> list[tuple[str, float]]:
     """
-    Distribución de versiones de `impl` en el último snapshot almacenado,
-    limitada a las top_k versiones (el resto se agrega a la más vieja de
-    las top_k, para no pedir imágenes exóticas).
+    Distribución de versiones desplegables de `impl` en el último snapshot.
+
+    Dos decisiones de diseño (aprendidas del primer contacto con datos
+    reales, que traen ~90 versiones con una cola larguísima):
+    1. Se agrega por major.minor (la granularidad de las imágenes de
+       Warnet: 29.0.0 y 29.0.1 usan la misma imagen "29.0").
+    2. Se toman las top_k versiones y se RENORMALIZA, en lugar de volcar
+       la cola en un solo bucket (eso distorsionaba brutalmente: la cola
+       puede ser ~50% de la red). Renormalizar preserva las proporciones
+       relativas entre las versiones representadas.
+    Devuelve [(versión, fracción)] e imprime la cobertura para que quede
+    claro qué porción de la red real representa la muestra.
     """
     row = con.execute("SELECT MAX(ts) FROM snapshots").fetchone()
     if not row or row[0] is None:
         sys.exit("telemetry.db vacío. Corré antes: bitnodes_ingest.py ingest")
     ts = row[0]
     rows = con.execute(
-        "SELECT version, count FROM version_counts WHERE ts=? AND impl=? "
-        "ORDER BY count DESC", (ts, impl),
+        "SELECT version, count FROM version_counts WHERE ts=? AND impl=?",
+        (ts, impl),
     ).fetchall()
     if not rows:
         sys.exit(f"El snapshot {ts} no tiene nodos de impl={impl}.")
-    head, tail = rows[:top_k], rows[top_k:]
-    extra = sum(n for _, n in tail)
-    if extra and head:
-        oldest = min(range(len(head)), key=lambda i: version_key(head[i][0]))
-        head[oldest] = (head[oldest][0], head[oldest][1] + extra)
-    total = sum(n for _, n in head)
-    return [(v, n / total) for v, n in head]
+
+    by_deployable: dict[str, int] = {}
+    for ver, n in rows:
+        key = to_warnet_version(ver)
+        by_deployable[key] = by_deployable.get(key, 0) + n
+
+    ranked = sorted(by_deployable.items(), key=lambda kv: -kv[1])
+    head = ranked[:top_k]
+    total_all = sum(by_deployable.values())
+    total_head = sum(n for _, n in head)
+    coverage = total_head / total_all
+    print(f"(top {len(head)} versiones cubren {coverage:.1%} de los "
+          f"{total_all} nodos {impl}; el resto se renormaliza)")
+    return [(v, n / total_head) for v, n in head]
 
 
 def sample_versions(dist: list[tuple[str, float]], n: int,
@@ -257,7 +273,7 @@ def main() -> None:
                        help="network.yaml con la distribución de mainnet")
     p.add_argument("--db", default="telemetry.db")
     p.add_argument("--nodes", type=int, default=20)
-    p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--top-k", type=int, default=8)
     p.add_argument("--out", default="network.yaml")
     p.add_argument("--seed", type=int, default=7)
     p.set_defaults(func=cmd_gen_network)
