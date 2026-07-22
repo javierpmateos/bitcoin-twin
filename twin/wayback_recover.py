@@ -76,7 +76,10 @@ UA_RE = re.compile(r"/Satoshi:(?P<ver>[\d.]+)[^/]*/(?:(?P<knots>Knots)[^/]*/)?")
 
 
 def parse_user_agent(ua: str) -> tuple[str, str]:
-    m = UA_RE.match(ua or "")
+    # La era earn.com mostraba user agents sin barras ("Satoshi:0.16.3");
+    # normalizamos a la forma canónica "/.../" antes de parsear.
+    ua = "/" + (ua or "").strip("/") + "/"
+    m = UA_RE.match(ua)
     if not m:
         return ("other", "unknown")
     return ("knots" if m.group("knots") else "core", m.group("ver").rstrip("."))
@@ -218,42 +221,31 @@ def parse_api_json(text: str) -> dict[tuple[str, str], int] | None:
     return counts
 
 
+# Firma de la tabla "top user agents" en ambas eras del sitio:
+# <a href="?q=/Satoshi:0.12.1/">...</a></td><td>1242 (19.55%)</td>
+# El ancla es el conteo seguido de su porcentaje entre paréntesis: las
+# filas de nodos individuales (con alturas de bloque y otros enteros)
+# no tienen esa forma y quedan excluidas por construcción.
+TOP_UA_RE = re.compile(
+    r'\?q=(?P<ua>/?Satoshi:[^"&\']+)["\'][^>]*>.*?</a>\s*</td>\s*'
+    r'<td[^>]*>\s*(?P<count>[\d,]+)\s*\(\s*[\d.]+\s*%\s*\)',
+    re.S | re.I)
+
+
 def parse_nodes_html(html: str) -> dict[tuple[str, str], int]:
     """
-    Página /nodes/ (top user agents). El diseño cambió con los años, así
-    que la estrategia es tolerante: buscar en cada fila de tabla un user
-    agent estilo /Satoshi:.../ y el primer entero "grande" de la fila.
-    Los porcentajes (con . o %) se ignoran. Si una era del sitio no usaba
-    tablas, cae a un barrido de pares user-agent/número en texto plano.
+    Página /nodes/ (tabla de top user agents). Parser ESTRICTO: solo
+    acepta el patrón link-con-?q= seguido de "conteo (porcentaje%)".
+    Preferimos que un formato desconocido devuelva vacío (y quede
+    flaggeado para inspección manual) antes que sumar números que no son
+    conteos — lección aprendida: la versión laxa de este parser absorbía
+    alturas de bloque de las filas de nodos individuales.
     """
     counts: dict[tuple[str, str], int] = {}
-    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", html, re.S | re.I)
-    for row in rows:
-        ua_m = re.search(r"(/Satoshi:[^<\s]+/)", row)
-        if not ua_m:
-            continue
-        cells = re.findall(r"<td[^>]*>(.*?)</td>", row, re.S | re.I)
-        count = None
-        for cell in cells:
-            text = re.sub(r"<[^>]+>", "", cell)
-            text = text.replace("(", " ").replace(")", " ")
-            for tok in text.split():
-                if re.fullmatch(r"[\d,]+", tok) and "," in tok or \
-                        re.fullmatch(r"\d{2,6}", tok):
-                    count = int(tok.replace(",", ""))
-                    break
-            if count is not None:
-                break
-        if count is None:
-            continue
-        key = parse_user_agent(ua_m.group(1))
-        counts[key] = counts.get(key, 0) + count
-    if counts:
-        return counts
-    # Fallback para diseños sin <table>: pares "UA ... número" en texto
-    for m in re.finditer(r"(/Satoshi:[^<\s]+/)\D{0,40}?([\d,]{3,})", html):
-        key = parse_user_agent(m.group(1))
-        counts[key] = counts.get(key, 0) + int(m.group(2).replace(",", ""))
+    for m in TOP_UA_RE.finditer(html):
+        key = parse_user_agent(m.group("ua"))
+        counts[key] = counts.get(key, 0) + int(
+            m.group("count").replace(",", ""))
     return counts
 
 
