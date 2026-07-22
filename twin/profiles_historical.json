@@ -1,0 +1,64 @@
+{
+  "meta": {
+    "calibrated_at": "2026-07-22T11:06:21.788278+00:00",
+    "source": "wayback_raw (Internet Archive)",
+    "version": "0.16.3",
+    "release_date": "2018-09-18",
+    "is_security": true,
+    "n_points": 11,
+    "points_first_30d": 1,
+    "rmse": 0.026860699420534425
+  },
+  "profiles": [
+    {
+      "name": "early_adopter",
+      "weight": 0.1,
+      "beta_base": 0.0001,
+      "beta_sec": 1.5,
+      "beta_imit": 0.2,
+      "aware_k": 1.5,
+      "aware_theta": 2.0,
+      "p_never": 0.0
+    },
+    {
+      "name": "mainstream",
+      "weight": 0.45,
+      "beta_base": 0.3554352026664941,
+      "beta_sec": 2.0,
+      "beta_imit": 0.0,
+      "aware_k": 2.0,
+      "aware_theta": 15.011750180773305,
+      "p_never": 0.02
+    },
+    {
+      "name": "conservative",
+      "weight": 0.25,
+      "beta_base": 0.00022744381308084416,
+      "beta_sec": 3.0,
+      "beta_imit": 5.910303446987107,
+      "aware_k": 2.5,
+      "aware_theta": 46.492333079130574,
+      "p_never": 0.05
+    },
+    {
+      "name": "corporate",
+      "weight": 0.12,
+      "beta_base": 0.01,
+      "beta_sec": 4.0,
+      "beta_imit": 1.0,
+      "aware_k": 4.0,
+      "aware_theta": 15.0,
+      "p_never": 0.03
+    },
+    {
+      "name": "laggard",
+      "weight": 0.08,
+      "beta_base": 0.002,
+      "beta_sec": 0.5,
+      "beta_imit": 1.0,
+      "aware_k": 3.0,
+      "aware_theta": 40.0,
+      "p_never": 0.9499682484013506
+    }
+  ]
+}
