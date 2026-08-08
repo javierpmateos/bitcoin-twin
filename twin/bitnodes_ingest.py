@@ -120,7 +120,11 @@ def store_snapshot(con: sqlite3.Connection, ts: int, total: int,
     cur = con.execute("SELECT 1 FROM snapshots WHERE ts=?", (ts,))
     if cur.fetchone():
         return False
-    con.execute("INSERT INTO snapshots VALUES (?,?)", (ts, total))
+    cols = [r[1] for r in con.execute("PRAGMA table_info(snapshots)")]
+    if "source" in cols:
+        con.execute("INSERT INTO snapshots (ts, total_nodes, source) VALUES (?,?,?)", (ts, total, "bitnodes"))
+    else:
+        con.execute("INSERT INTO snapshots VALUES (?,?)", (ts, total))
     con.executemany(
         "INSERT INTO version_counts VALUES (?,?,?,?)",
         [(ts, impl, ver, n) for (impl, ver), n in counts.items()],

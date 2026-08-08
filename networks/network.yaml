@@ -1,20 +1,20 @@
 nodes:
   - name: tank-0000
-    version: "27.0"
+    version: "31.1"
     addnode:
       - tank-0011
       - tank-0013
       - tank-0016
       - tank-0018
   - name: tank-0001
-    version: "29.0"
+    version: "27.0"
     addnode:
       - tank-0000
       - tank-0004
       - tank-0006
       - tank-0019
   - name: tank-0002
-    version: "26.0"
+    version: "29.2"
     addnode:
       - tank-0003
       - tank-0008
@@ -28,14 +28,14 @@ nodes:
       - tank-0014
       - tank-0018
   - name: tank-0004
-    version: "28.1"
+    version: "31.0"
     addnode:
       - tank-0008
       - tank-0009
       - tank-0011
       - tank-0019
   - name: tank-0005
-    version: "29.0"
+    version: "27.0"
     addnode:
       - tank-0007
       - tank-0012
@@ -49,35 +49,35 @@ nodes:
       - tank-0014
       - tank-0016
   - name: tank-0007
-    version: "26.0"
+    version: "29.2"
     addnode:
       - tank-0000
       - tank-0002
       - tank-0010
       - tank-0019
   - name: tank-0008
-    version: "26.0"
+    version: "29.2"
     addnode:
       - tank-0007
       - tank-0010
       - tank-0011
       - tank-0014
   - name: tank-0009
-    version: "29.3"
+    version: "28.1"
     addnode:
       - tank-0000
       - tank-0001
       - tank-0003
       - tank-0017
   - name: tank-0010
-    version: "28.1"
+    version: "31.0"
     addnode:
       - tank-0003
       - tank-0007
       - tank-0013
       - tank-0015
   - name: tank-0011
-    version: "28.1"
+    version: "31.0"
     addnode:
       - tank-0002
       - tank-0010
@@ -98,42 +98,42 @@ nodes:
       - tank-0008
       - tank-0011
   - name: tank-0014
-    version: "29.3"
+    version: "28.1"
     addnode:
       - tank-0006
       - tank-0009
       - tank-0012
       - tank-0015
   - name: tank-0015
-    version: "29.3"
+    version: "28.1"
     addnode:
       - tank-0000
       - tank-0006
       - tank-0011
       - tank-0019
   - name: tank-0016
-    version: "29.2"
+    version: "29.0"
     addnode:
       - tank-0006
       - tank-0007
       - tank-0013
       - tank-0019
   - name: tank-0017
-    version: "26.0"
+    version: "29.2"
     addnode:
       - tank-0007
       - tank-0008
       - tank-0009
       - tank-0010
   - name: tank-0018
-    version: "27.0"
+    version: "31.1"
     addnode:
       - tank-0002
       - tank-0008
       - tank-0010
       - tank-0015
   - name: tank-0019
-    version: "29.2"
+    version: "29.0"
     addnode:
       - tank-0001
       - tank-0006
