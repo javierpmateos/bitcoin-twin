@@ -159,6 +159,105 @@ def wayback_series(path):
     return [{"date": iso(ts), "total": total} for ts, total in rows]
 
 
+def impl_share_series(con, source="bitnodes"):
+    """Serie temporal (un punto por día) del % Core vs Knots vs other."""
+    tss = [r[0] for r in con.execute(
+        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
+        (source,)).fetchall()]
+    by_day = {}
+    for ts in tss:
+        by_day[iso(ts)] = ts
+    out = []
+    for day in sorted(by_day):
+        ts = by_day[day]
+        rows = con.execute(
+            "SELECT impl, count FROM version_counts WHERE ts=?",
+            (ts,)).fetchall()
+        core = knots = other = total = 0
+        for impl, n in rows:
+            total += n
+            base = normalize_impl(impl)[0]
+            if base == "core":
+                core += n
+            elif base == "knots":
+                knots += n
+            else:
+                other += n
+        if total:
+            out.append({"date": day,
+                        "core": round(100 * core / total, 2),
+                        "knots": round(100 * knots / total, 2),
+                        "other": round(100 * other / total, 2)})
+    return out
+
+
+def _vk(ver):
+    try:
+        return tuple(int(x) for x in ver.split("."))
+    except ValueError:
+        return (-1,)
+
+
+def stale_series(con, source="bitnodes"):
+    """Serie del nº de nodos Core en versiones 'viejas' (major < actual-2).
+    Refleja la cola larga que nunca actualiza."""
+    tss = [r[0] for r in con.execute(
+        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
+        (source,)).fetchall()]
+    by_day = {}
+    for ts in tss:
+        by_day[iso(ts)] = ts
+    out = []
+    for day in sorted(by_day):
+        ts = by_day[day]
+        rows = con.execute(
+            "SELECT impl, version, count FROM version_counts WHERE ts=?",
+            (ts,)).fetchall()
+        cores = [(v, n) for impl, v, n in rows
+                 if normalize_impl(impl)[0] == "core"]
+        if not cores:
+            continue
+        newest_major = max(_vk(v)[0] for v, _ in cores)
+        # "viejo" = major al menos 3 por debajo del más nuevo, o serie 0.x
+        stale = sum(n for v, n in cores
+                    if _vk(v)[0] < newest_major - 2 or _vk(v)[0] == 0)
+        total = sum(n for _, n in cores)
+        out.append({"date": day, "stale": stale,
+                    "pct": round(100 * stale / total, 2) if total else 0})
+    return out
+
+
+def latest_adoption_series(con, source="bitnodes"):
+    """Serie del % de la red Core en la versión major.minor más nueva vista."""
+    tss = [r[0] for r in con.execute(
+        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
+        (source,)).fetchall()]
+    by_day = {}
+    for ts in tss:
+        by_day[iso(ts)] = ts
+    out = []
+    for day in sorted(by_day):
+        ts = by_day[day]
+        rows = con.execute(
+            "SELECT impl, version, count FROM version_counts WHERE ts=?",
+            (ts,)).fetchall()
+        cores = [(v, n) for impl, v, n in rows
+                 if normalize_impl(impl)[0] == "core"]
+        if not cores:
+            continue
+        # versión desplegable (major.minor) más nueva
+        def mmkey(v):
+            p = v.split(".")
+            return (int(p[0]), int(p[1]) if len(p) > 1 else 0)
+        newest = max(mmkey(v) for v, _ in cores)
+        on_newest = sum(n for v, n in cores if mmkey(v) == newest)
+        total = sum(n for _, n in cores)
+        label = f"{newest[0]}.{newest[1]}"
+        out.append({"date": day, "pct": round(100 * on_newest / total, 2)
+                    if total else 0, "version": label})
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Render
 # ---------------------------------------------------------------------------
@@ -298,6 +397,31 @@ TEMPLATE = r"""<!DOCTYPE html>
       Short window for now: the series grows daily.</p>
   </section>
 
+  <!-- Core vs Knots -->
+  <section>
+    <h2 data-i18n="ckHead">Core vs Knots · share over time</h2>
+    <div class="chartbox"><canvas id="ck"></canvas></div>
+    <p class="note" data-i18n="ckNote">Percentage of the reachable network running each
+      implementation. Knots' share is closely watched amid the BIP-110 debate.</p>
+  </section>
+
+  <!-- Cola larga -->
+  <section>
+    <h2 data-i18n="staleHead">The long tail · outdated nodes</h2>
+    <div class="chartbox"><canvas id="stale"></canvas></div>
+    <p class="note" data-i18n="staleNote">Core nodes running versions at least three major
+      releases behind the newest (or 0.x). Echoes the historical finding that a
+      large fraction never updates — even years after a critical fix.</p>
+  </section>
+
+  <!-- Adopción última versión -->
+  <section>
+    <h2 data-i18n="adoptHead">Newest-version adoption</h2>
+    <div class="chartbox"><canvas id="adopt"></canvas></div>
+    <p class="note" data-i18n="adoptNote">Share of Core nodes already on the newest deployable
+      (major.minor) version seen in the network — the adoption model made visible on live data.</p>
+  </section>
+
   <!-- Fuentes -->
   <section>
     <h2 data-i18n="srcHead">Discrepancy between sources</h2>
@@ -338,6 +462,12 @@ const I18N = {
     distNote: "Top {n} deployable versions (major.minor). Core in blue, Knots in purple.",
     evoHead: "Network evolution",
     evoNote: "Reachable nodes by implementation, one point per day. Short window for now: the series grows daily.",
+    ckHead: "Core vs Knots · share over time",
+    ckNote: "Percentage of the reachable network running each implementation. Knots' share is closely watched amid the BIP-110 debate.",
+    staleHead: "The long tail · outdated nodes",
+    staleNote: "Core nodes running versions at least three major releases behind the newest (or 0.x). Echoes the historical finding that a large fraction never updates — even years after a critical fix.",
+    adoptHead: "Newest-version adoption",
+    adoptNote: "Share of Core nodes already on the newest deployable (major.minor) version seen in the network — the adoption model made visible on live data.",
     srcHead: "Discrepancy between sources",
     srcNote: "Different crawlers see the network differently (coverage and methodology). Cross-checking sources, rather than trusting a single one, is part of the project's goal — single-source dependency is what left the ecosystem without data when bitnodes.io expired in May 2026.",
     srcCols: ["source", "date", "nodes seen"],
@@ -347,7 +477,7 @@ const I18N = {
     generated: "Generated", source: "source",
     noChart: "(chart unavailable without the charts library)",
     foot: "Data: bitnod.es and DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. This panel is a static snapshot generated on {d}; regenerate with build_dashboard.py. Open-source project (MIT).",
-    axisSignaling: "signaling nodes"
+    axisSignaling: "signaling nodes", axisStale: "outdated nodes"
   },
   es: {
     title: "Panel de telemetría y adopción",
@@ -364,6 +494,12 @@ const I18N = {
     distNote: "Top {n} versiones desplegables (major.minor). Core en azul, Knots en violeta.",
     evoHead: "Evolución de la red",
     evoNote: "Nodos alcanzables por implementación, un punto por día. Ventana corta por ahora: la serie crece a diario.",
+    ckHead: "Core vs Knots · cuota en el tiempo",
+    ckNote: "Porcentaje de la red alcanzable que corre cada implementación. La cuota de Knots es muy observada en medio del debate BIP-110.",
+    staleHead: "La cola larga · nodos desactualizados",
+    staleNote: "Nodos Core en versiones al menos tres releases mayores por detrás de la más nueva (o 0.x). Refleja el hallazgo histórico de que una fracción grande nunca actualiza — incluso años después de un fix crítico.",
+    adoptHead: "Adopción de la última versión",
+    adoptNote: "Cuota de nodos Core ya en la versión desplegable (major.minor) más nueva vista en la red — el modelo de adopción hecho visible sobre datos en vivo.",
     srcHead: "Discrepancia entre fuentes",
     srcNote: "Distintos crawlers ven la red de forma distinta (cobertura y metodología). Cruzar fuentes, en vez de confiar en una sola, es parte del objetivo del proyecto — la fuente única fue lo que dejó al ecosistema sin datos cuando bitnodes.io expiró en mayo 2026.",
     srcCols: ["fuente", "fecha", "nodos vistos"],
@@ -373,7 +509,7 @@ const I18N = {
     generated: "Generado", source: "fuente",
     noChart: "(gráfico no disponible sin la librería de charts)",
     foot: "Datos: bitnod.es y DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Este panel es una foto estática generada el {d}; regenerar con build_dashboard.py. Proyecto open-source (MIT).",
-    axisSignaling: "nodos señalizando"
+    axisSignaling: "nodos señalizando", axisStale: "nodos desactualizados"
   }
 };
 let LANG = "en";
@@ -446,6 +582,52 @@ function buildCharts(t){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{labels:{boxWidth:12}}},
       scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true}}}
+  });
+  // Core vs Knots (% de la red)
+  charts.ck = mkchart('ck', {
+    type:'line',
+    data:{ labels:D.implShare.map(p=>p.date),
+      datasets:[
+        {label:'Core %',data:D.implShare.map(p=>p.core),
+         borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',
+         fill:true,tension:.25,pointRadius:2},
+        {label:'Knots %',data:D.implShare.map(p=>p.knots),
+         borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',
+         fill:true,tension:.25,pointRadius:2}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{boxWidth:12}}},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,
+          ticks:{callback:v=>v+'%'}}}}
+  });
+  // Cola larga (nodos en versiones viejas)
+  charts.stale = mkchart('stale', {
+    type:'line',
+    data:{ labels:D.stale.map(p=>p.date),
+      datasets:[{ label:t.staleHead, data:D.stale.map(p=>p.stale),
+        borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',
+        fill:true,tension:.25,pointRadius:2 }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{afterLabel:(c)=>{
+          const p=D.stale[c.dataIndex]; return p?('· '+p.pct+'% of Core'):'';}}}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
+        title:{display:true,text:t.axisStale}}}}
+  });
+  // Adopción de la última versión
+  charts.adopt = mkchart('adopt', {
+    type:'line',
+    data:{ labels:D.latestAdoption.map(p=>p.date),
+      datasets:[{ data:D.latestAdoption.map(p=>p.pct),
+        borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.10)',
+        fill:true,tension:.25,pointRadius:3 }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{afterLabel:(c)=>{
+          const p=D.latestAdoption[c.dataIndex];
+          return p?('v'+p.version):'';}}}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
+        ticks:{callback:v=>v+'%'}}}}
   });
   if(D.wayback.length){
     charts.hist = mkchart('hist', {
@@ -570,6 +752,9 @@ def main():
             "pct": 100.0 * (knots_bip + core_bip) / total if total else 0,
         },
         "timeseries": timeseries(con, "bitnodes"),
+        "implShare": impl_share_series(con, "bitnodes"),
+        "stale": stale_series(con, "bitnodes"),
+        "latestAdoption": latest_adoption_series(con, "bitnodes"),
         "sources": source_compare(con),
         "wayback": wayback_series(args.wayback),
     }

@@ -127,6 +127,31 @@
       Short window for now: the series grows daily.</p>
   </section>
 
+  <!-- Core vs Knots -->
+  <section>
+    <h2 data-i18n="ckHead">Core vs Knots · share over time</h2>
+    <div class="chartbox"><canvas id="ck"></canvas></div>
+    <p class="note" data-i18n="ckNote">Percentage of the reachable network running each
+      implementation. Knots' share is closely watched amid the BIP-110 debate.</p>
+  </section>
+
+  <!-- Cola larga -->
+  <section>
+    <h2 data-i18n="staleHead">The long tail · outdated nodes</h2>
+    <div class="chartbox"><canvas id="stale"></canvas></div>
+    <p class="note" data-i18n="staleNote">Core nodes running versions at least three major
+      releases behind the newest (or 0.x). Echoes the historical finding that a
+      large fraction never updates — even years after a critical fix.</p>
+  </section>
+
+  <!-- Adopción última versión -->
+  <section>
+    <h2 data-i18n="adoptHead">Newest-version adoption</h2>
+    <div class="chartbox"><canvas id="adopt"></canvas></div>
+    <p class="note" data-i18n="adoptNote">Share of Core nodes already on the newest deployable
+      (major.minor) version seen in the network — the adoption model made visible on live data.</p>
+  </section>
+
   <!-- Fuentes -->
   <section>
     <h2 data-i18n="srcHead">Discrepancy between sources</h2>
@@ -167,6 +192,12 @@ const I18N = {
     distNote: "Top {n} deployable versions (major.minor). Core in blue, Knots in purple.",
     evoHead: "Network evolution",
     evoNote: "Reachable nodes by implementation, one point per day. Short window for now: the series grows daily.",
+    ckHead: "Core vs Knots · share over time",
+    ckNote: "Percentage of the reachable network running each implementation. Knots' share is closely watched amid the BIP-110 debate.",
+    staleHead: "The long tail · outdated nodes",
+    staleNote: "Core nodes running versions at least three major releases behind the newest (or 0.x). Echoes the historical finding that a large fraction never updates — even years after a critical fix.",
+    adoptHead: "Newest-version adoption",
+    adoptNote: "Share of Core nodes already on the newest deployable (major.minor) version seen in the network — the adoption model made visible on live data.",
     srcHead: "Discrepancy between sources",
     srcNote: "Different crawlers see the network differently (coverage and methodology). Cross-checking sources, rather than trusting a single one, is part of the project's goal — single-source dependency is what left the ecosystem without data when bitnodes.io expired in May 2026.",
     srcCols: ["source", "date", "nodes seen"],
@@ -176,7 +207,7 @@ const I18N = {
     generated: "Generated", source: "source",
     noChart: "(chart unavailable without the charts library)",
     foot: "Data: bitnod.es and DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. This panel is a static snapshot generated on {d}; regenerate with build_dashboard.py. Open-source project (MIT).",
-    axisSignaling: "signaling nodes"
+    axisSignaling: "signaling nodes", axisStale: "outdated nodes"
   },
   es: {
     title: "Panel de telemetría y adopción",
@@ -193,6 +224,12 @@ const I18N = {
     distNote: "Top {n} versiones desplegables (major.minor). Core en azul, Knots en violeta.",
     evoHead: "Evolución de la red",
     evoNote: "Nodos alcanzables por implementación, un punto por día. Ventana corta por ahora: la serie crece a diario.",
+    ckHead: "Core vs Knots · cuota en el tiempo",
+    ckNote: "Porcentaje de la red alcanzable que corre cada implementación. La cuota de Knots es muy observada en medio del debate BIP-110.",
+    staleHead: "La cola larga · nodos desactualizados",
+    staleNote: "Nodos Core en versiones al menos tres releases mayores por detrás de la más nueva (o 0.x). Refleja el hallazgo histórico de que una fracción grande nunca actualiza — incluso años después de un fix crítico.",
+    adoptHead: "Adopción de la última versión",
+    adoptNote: "Cuota de nodos Core ya en la versión desplegable (major.minor) más nueva vista en la red — el modelo de adopción hecho visible sobre datos en vivo.",
     srcHead: "Discrepancia entre fuentes",
     srcNote: "Distintos crawlers ven la red de forma distinta (cobertura y metodología). Cruzar fuentes, en vez de confiar en una sola, es parte del objetivo del proyecto — la fuente única fue lo que dejó al ecosistema sin datos cuando bitnodes.io expiró en mayo 2026.",
     srcCols: ["fuente", "fecha", "nodos vistos"],
@@ -202,11 +239,11 @@ const I18N = {
     generated: "Generado", source: "fuente",
     noChart: "(gráfico no disponible sin la librería de charts)",
     foot: "Datos: bitnod.es y DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Este panel es una foto estática generada el {d}; regenerar con build_dashboard.py. Proyecto open-source (MIT).",
-    axisSignaling: "nodos señalizando"
+    axisSignaling: "nodos señalizando", axisStale: "nodos desactualizados"
   }
 };
 let LANG = "en";
-const D = {"generated": "2026-08-16 11:20 UTC", "snapshotDate": "2026-08-16", "primarySource": "bitnod.es", "networkTotal": 27088, "dominant": "core 31.0", "knotsPct": 17.380389840519786, "distinctVersions": 90, "distribution": [["core 31.0", 4871], ["knots 29.3", 3110], ["core 31.1", 2175], ["core 29.3", 1989], ["core 28.1", 1910], ["core 29.2", 1169], ["core 30.2", 1130], ["core 29.0", 1103], ["core 27.0", 998], ["core 26.0", 987], ["core 30.0", 863], ["core 25.1", 825]], "bip": {"knots": 283, "core": 1, "networkTotal": 27088, "pct": 1.0484347312463083}, "timeseries": [{"date": "2026-07-21", "total": 21609, "core": 17895, "knots": 3626, "bip110": 0}, {"date": "2026-07-22", "total": 21200, "core": 17587, "knots": 3529, "bip110": 0}, {"date": "2026-07-23", "total": 21752, "core": 18024, "knots": 3645, "bip110": 0}, {"date": "2026-07-24", "total": 21799, "core": 18021, "knots": 3694, "bip110": 0}, {"date": "2026-07-26", "total": 22821, "core": 18751, "knots": 3988, "bip110": 0}, {"date": "2026-08-08", "total": 26032, "core": 20638, "knots": 5305, "bip110": 476}, {"date": "2026-08-09", "total": 26442, "core": 20983, "knots": 5370, "bip110": 443}, {"date": "2026-08-10", "total": 26593, "core": 21169, "knots": 5337, "bip110": 431}, {"date": "2026-08-11", "total": 26897, "core": 21510, "knots": 5298, "bip110": 395}, {"date": "2026-08-12", "total": 27069, "core": 21836, "knots": 5144, "bip110": 355}, {"date": "2026-08-13", "total": 27347, "core": 22138, "knots": 5119, "bip110": 336}, {"date": "2026-08-14", "total": 26991, "core": 21874, "knots": 5029, "bip110": 329}, {"date": "2026-08-16", "total": 27088, "core": 22293, "knots": 4708, "bip110": 284}], "sources": {"bitnodes": {"ts": "2026-08-16", "total": 27088, "share": {"0.11": 3.691671588895452e-05, "0.12": 0.0002215002953337271, "0.13": 0.0002215002953337271, "0.14": 0.0001845835794447726, "0.15": 0.0001845835794447726, "0.16": 0.0003691671588895452, "0.17": 0.0012182516243354992, "0.18": 0.0011075014766686357, "0.19": 0.0005537507383343178, "0.20": 0.004503839338452451, "0.21": 0.00424542232722977, "0.8": 0.00011075014766686355, "0.9": 3.691671588895452e-05, "1.0": 0.00011075014766686355, "22.0": 0.011739515652687537, "22.1": 0.00014766686355581807, "22.99": 7.383343177790904e-05, "23.0": 0.0045407560543414055, "23.1": 0.00025841701122268163, "23.2": 3.691671588895452e-05, "23.99": 3.691671588895452e-05, "24.0": 0.007494093325457767, "24.1": 0.0006275841701122269, "24.2": 0.0004430005906674542, "24.99": 0.0003691671588895452, "25.0": 0.022851447135262846, "25.1": 0.030456290608387476, "25.2": 0.00047991730655640874, "25.99": 0.0007014176018901359, "26.0": 0.03643679858239811, "26.1": 0.0017350856467808623, "26.2": 0.0016612522150029534, "26.99": 0.0001845835794447726, "27.0": 0.03684288245717661, "27.1": 0.02499261665682221, "27.2": 0.005316007088009451, "27.99": 0.00114441819255759, "28.0": 0.019159775546367396, "28.1": 0.07051092734790312, "28.2": 0.0017350856467808623, "28.3": 0.0014397519196692262, "28.4": 0.0014397519196692262, "28.99": 0.00047991730655640874, "29.0": 0.040719137625516835, "29.1": 0.022999113998818665, "29.2": 0.043155640874187835, "29.3": 0.07342734790313053, "29.4": 0.005279090372120496, "29.99": 0.0003691671588895452, "30.0": 0.03185912581216775, "30.1": 0.000849084465445954, "30.2": 0.0417158889545186, "30.3": 0.0019565859421145893, "30.99": 0.0005906674542232723, "31.0": 0.17982132309509746, "31.1": 0.08029385705847608, "31.99": 0.003507088009450679}}, "dsn": {"ts": "2026-07-26", "total": 224, "share": {"0.16": 0.017857142857142856, "0.19": 0.0, "0.20": 0.03571428571428571, "0.21": 0.03125, "1.0": 0.0, "22.0": 0.11607142857142858, "23.0": 0.04017857142857143, "24.0": 0.10714285714285714, "25.0": 0.08482142857142858, "26.0": 0.08928571428571429, "27.0": 0.17410714285714285, "27.1": 0.18303571428571427, "28.0": 0.12053571428571429}}}, "wayback": [{"date": "2016-05-12", "total": 3650}, {"date": "2016-08-24", "total": 3723}, {"date": "2016-10-31", "total": 3671}, {"date": "2016-11-02", "total": 3830}, {"date": "2016-11-05", "total": 3864}, {"date": "2016-11-08", "total": 3795}, {"date": "2016-11-10", "total": 3902}, {"date": "2016-11-11", "total": 3907}, {"date": "2016-11-13", "total": 3920}, {"date": "2016-11-14", "total": 3960}, {"date": "2016-11-17", "total": 3931}, {"date": "2016-11-20", "total": 3862}, {"date": "2016-11-23", "total": 3935}, {"date": "2016-11-25", "total": 3728}, {"date": "2016-11-28", "total": 3834}, {"date": "2016-11-29", "total": 3865}, {"date": "2016-12-07", "total": 3866}, {"date": "2016-12-13", "total": 3973}, {"date": "2016-12-20", "total": 4054}, {"date": "2016-12-24", "total": 4117}, {"date": "2017-01-01", "total": 4215}, {"date": "2017-01-04", "total": 4156}, {"date": "2017-01-07", "total": 4199}, {"date": "2017-01-12", "total": 4186}, {"date": "2017-03-07", "total": 4216}, {"date": "2017-05-15", "total": 5079}, {"date": "2017-05-30", "total": 5503}, {"date": "2017-09-08", "total": 5824}, {"date": "2017-09-28", "total": 5606}, {"date": "2017-11-14", "total": 6564}, {"date": "2017-12-01", "total": 6953}, {"date": "2018-06-18", "total": 8173}, {"date": "2018-06-28", "total": 7882}, {"date": "2018-10-04", "total": 7753}, {"date": "2018-12-29", "total": 7667}, {"date": "2019-05-23", "total": 7145}, {"date": "2019-07-13", "total": 7614}, {"date": "2019-08-20", "total": 7226}, {"date": "2019-09-21", "total": 7174}, {"date": "2019-10-19", "total": 7316}, {"date": "2019-11-15", "total": 7462}, {"date": "2019-11-20", "total": 7422}, {"date": "2019-12-08", "total": 7233}, {"date": "2019-12-20", "total": 7409}]};
+const D = {"generated": "2026-08-16 20:54 UTC", "snapshotDate": "2026-08-16", "primarySource": "bitnod.es", "networkTotal": 27147, "dominant": "core 31.0", "knotsPct": 17.349983423582717, "distinctVersions": 90, "distribution": [["core 31.0", 4882], ["knots 29.3", 3107], ["core 31.1", 2186], ["core 29.3", 1995], ["core 28.1", 1915], ["core 29.2", 1172], ["core 30.2", 1134], ["core 29.0", 1106], ["core 27.0", 1001], ["core 26.0", 987], ["core 30.0", 865], ["core 25.1", 826]], "bip": {"knots": 281, "core": 1, "networkTotal": 27147, "pct": 1.038788816443806}, "timeseries": [{"date": "2026-07-21", "total": 21609, "core": 17895, "knots": 3626, "bip110": 0}, {"date": "2026-07-22", "total": 21200, "core": 17587, "knots": 3529, "bip110": 0}, {"date": "2026-07-23", "total": 21752, "core": 18024, "knots": 3645, "bip110": 0}, {"date": "2026-07-24", "total": 21799, "core": 18021, "knots": 3694, "bip110": 0}, {"date": "2026-07-26", "total": 22821, "core": 18751, "knots": 3988, "bip110": 0}, {"date": "2026-08-08", "total": 26032, "core": 20638, "knots": 5305, "bip110": 476}, {"date": "2026-08-09", "total": 26442, "core": 20983, "knots": 5370, "bip110": 443}, {"date": "2026-08-10", "total": 26593, "core": 21169, "knots": 5337, "bip110": 431}, {"date": "2026-08-11", "total": 26897, "core": 21510, "knots": 5298, "bip110": 395}, {"date": "2026-08-12", "total": 27069, "core": 21836, "knots": 5144, "bip110": 355}, {"date": "2026-08-13", "total": 27347, "core": 22138, "knots": 5119, "bip110": 336}, {"date": "2026-08-14", "total": 26991, "core": 21874, "knots": 5029, "bip110": 329}, {"date": "2026-08-16", "total": 27147, "core": 22350, "knots": 4710, "bip110": 282}], "implShare": [{"date": "2026-07-21", "core": 82.81, "knots": 16.78, "other": 0.41}, {"date": "2026-07-22", "core": 82.96, "knots": 16.65, "other": 0.4}, {"date": "2026-07-23", "core": 82.86, "knots": 16.76, "other": 0.38}, {"date": "2026-07-24", "core": 82.67, "knots": 16.95, "other": 0.39}, {"date": "2026-07-26", "core": 82.17, "knots": 17.48, "other": 0.36}, {"date": "2026-08-08", "core": 79.28, "knots": 20.38, "other": 0.34}, {"date": "2026-08-09", "core": 79.35, "knots": 20.31, "other": 0.34}, {"date": "2026-08-10", "core": 79.6, "knots": 20.07, "other": 0.33}, {"date": "2026-08-11", "core": 79.97, "knots": 19.7, "other": 0.33}, {"date": "2026-08-12", "core": 80.67, "knots": 19.0, "other": 0.33}, {"date": "2026-08-13", "core": 80.95, "knots": 18.72, "other": 0.33}, {"date": "2026-08-14", "core": 81.04, "knots": 18.63, "other": 0.33}, {"date": "2026-08-16", "core": 82.33, "knots": 17.35, "other": 0.32}], "stale": [{"date": "2026-07-21", "stale": 8033, "pct": 44.89}, {"date": "2026-07-22", "stale": 7934, "pct": 45.11}, {"date": "2026-07-23", "stale": 8047, "pct": 44.65}, {"date": "2026-07-24", "stale": 8041, "pct": 44.62}, {"date": "2026-07-26", "stale": 8146, "pct": 43.44}, {"date": "2026-08-08", "stale": 8046, "pct": 38.99}, {"date": "2026-08-09", "stale": 8055, "pct": 38.39}, {"date": "2026-08-10", "stale": 8072, "pct": 38.13}, {"date": "2026-08-11", "stale": 8145, "pct": 37.87}, {"date": "2026-08-12", "stale": 8160, "pct": 37.37}, {"date": "2026-08-13", "stale": 8201, "pct": 37.04}, {"date": "2026-08-14", "stale": 8125, "pct": 37.14}, {"date": "2026-08-16", "stale": 8044, "pct": 35.99}], "latestAdoption": [{"date": "2026-07-21", "pct": 0.4, "version": "31.99"}, {"date": "2026-07-22", "pct": 0.4, "version": "31.99"}, {"date": "2026-07-23", "pct": 0.38, "version": "31.99"}, {"date": "2026-07-24", "pct": 0.37, "version": "31.99"}, {"date": "2026-07-26", "pct": 0.39, "version": "31.99"}, {"date": "2026-08-08", "pct": 0.42, "version": "31.99"}, {"date": "2026-08-09", "pct": 0.44, "version": "31.99"}, {"date": "2026-08-10", "pct": 0.44, "version": "31.99"}, {"date": "2026-08-11", "pct": 0.44, "version": "31.99"}, {"date": "2026-08-12", "pct": 0.43, "version": "31.99"}, {"date": "2026-08-13", "pct": 0.42, "version": "31.99"}, {"date": "2026-08-14", "pct": 0.43, "version": "31.99"}, {"date": "2026-08-16", "pct": 0.42, "version": "31.99"}], "sources": {"bitnodes": {"ts": "2026-08-16", "total": 27147, "share": {"0.11": 3.6836482852617235e-05, "0.12": 0.00022101889711570338, "0.13": 0.00022101889711570338, "0.14": 0.00018418241426308615, "0.15": 0.00018418241426308615, "0.16": 0.0003683648285261723, "0.17": 0.0012156039341363687, "0.18": 0.0011050944855785169, "0.19": 0.0005525472427892584, "0.20": 0.004494050908019302, "0.21": 0.004273032010903599, "0.8": 0.00011050944855785169, "0.9": 3.6836482852617235e-05, "1.0": 0.00011050944855785169, "22.0": 0.011750838029984898, "22.1": 0.00014734593141046894, "22.99": 7.367296570523447e-05, "23.0": 0.004567723873724536, "23.1": 0.0002578553799683206, "23.2": 3.6836482852617235e-05, "23.99": 3.6836482852617235e-05, "24.0": 0.007440969536228681, "24.1": 0.000626220208494493, "24.2": 0.00044203779423140677, "24.99": 0.00040520131137878956, "25.0": 0.022801782885770068, "25.1": 0.030426934836261833, "25.2": 0.00047887427708402403, "25.99": 0.0006998931741997274, "26.0": 0.03635760857553321, "26.1": 0.0017313146940730099, "26.2": 0.0016576417283677754, "26.99": 0.00018418241426308615, "27.0": 0.03687331933546985, "27.1": 0.024975135374074482, "27.2": 0.005304453530776881, "27.99": 0.001141930968431134, "28.0": 0.01915497108336096, "28.1": 0.070541864662762, "28.2": 0.0017313146940730099, "28.3": 0.001436622831252072, "28.4": 0.001436622831252072, "28.99": 0.00047887427708402403, "29.0": 0.04074115003499466, "29.1": 0.02298596530003315, "29.2": 0.04317235790326739, "29.3": 0.07348878329097137, "29.4": 0.005304453530776881, "29.99": 0.0003683648285261723, "30.0": 0.031863557667513906, "30.1": 0.0008840755884628135, "30.2": 0.041772571554867945, "30.3": 0.0019891700740413305, "30.99": 0.0005893837256418758, "31.0": 0.17983570928647732, "31.1": 0.08052455151582127, "31.99": 0.0034626293881460197}}, "dsn": {"ts": "2026-07-26", "total": 224, "share": {"0.16": 0.017857142857142856, "0.19": 0.0, "0.20": 0.03571428571428571, "0.21": 0.03125, "1.0": 0.0, "22.0": 0.11607142857142858, "23.0": 0.04017857142857143, "24.0": 0.10714285714285714, "25.0": 0.08482142857142858, "26.0": 0.08928571428571429, "27.0": 0.17410714285714285, "27.1": 0.18303571428571427, "28.0": 0.12053571428571429}}}, "wayback": [{"date": "2016-05-12", "total": 3650}, {"date": "2016-08-24", "total": 3723}, {"date": "2016-10-31", "total": 3671}, {"date": "2016-11-02", "total": 3830}, {"date": "2016-11-05", "total": 3864}, {"date": "2016-11-08", "total": 3795}, {"date": "2016-11-10", "total": 3902}, {"date": "2016-11-11", "total": 3907}, {"date": "2016-11-13", "total": 3920}, {"date": "2016-11-14", "total": 3960}, {"date": "2016-11-17", "total": 3931}, {"date": "2016-11-20", "total": 3862}, {"date": "2016-11-23", "total": 3935}, {"date": "2016-11-25", "total": 3728}, {"date": "2016-11-28", "total": 3834}, {"date": "2016-11-29", "total": 3865}, {"date": "2016-12-07", "total": 3866}, {"date": "2016-12-13", "total": 3973}, {"date": "2016-12-20", "total": 4054}, {"date": "2016-12-24", "total": 4117}, {"date": "2017-01-01", "total": 4215}, {"date": "2017-01-04", "total": 4156}, {"date": "2017-01-07", "total": 4199}, {"date": "2017-01-12", "total": 4186}, {"date": "2017-03-07", "total": 4216}, {"date": "2017-05-15", "total": 5079}, {"date": "2017-05-30", "total": 5503}, {"date": "2017-09-08", "total": 5824}, {"date": "2017-09-28", "total": 5606}, {"date": "2017-11-14", "total": 6564}, {"date": "2017-12-01", "total": 6953}, {"date": "2018-06-18", "total": 8173}, {"date": "2018-06-28", "total": 7882}, {"date": "2018-10-04", "total": 7753}, {"date": "2018-12-29", "total": 7667}, {"date": "2019-05-23", "total": 7145}, {"date": "2019-07-13", "total": 7614}, {"date": "2019-08-20", "total": 7226}, {"date": "2019-09-21", "total": 7174}, {"date": "2019-10-19", "total": 7316}, {"date": "2019-11-15", "total": 7462}, {"date": "2019-11-20", "total": 7422}, {"date": "2019-12-08", "total": 7233}, {"date": "2019-12-20", "total": 7409}]};
 const C = getComputedStyle(document.documentElement);
 const col = n => C.getPropertyValue(n).trim();
 const fmt = n => n.toLocaleString('en-US');
@@ -275,6 +312,52 @@ function buildCharts(t){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{labels:{boxWidth:12}}},
       scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true}}}
+  });
+  // Core vs Knots (% de la red)
+  charts.ck = mkchart('ck', {
+    type:'line',
+    data:{ labels:D.implShare.map(p=>p.date),
+      datasets:[
+        {label:'Core %',data:D.implShare.map(p=>p.core),
+         borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',
+         fill:true,tension:.25,pointRadius:2},
+        {label:'Knots %',data:D.implShare.map(p=>p.knots),
+         borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',
+         fill:true,tension:.25,pointRadius:2}]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{labels:{boxWidth:12}}},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,
+          ticks:{callback:v=>v+'%'}}}}
+  });
+  // Cola larga (nodos en versiones viejas)
+  charts.stale = mkchart('stale', {
+    type:'line',
+    data:{ labels:D.stale.map(p=>p.date),
+      datasets:[{ label:t.staleHead, data:D.stale.map(p=>p.stale),
+        borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',
+        fill:true,tension:.25,pointRadius:2 }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{afterLabel:(c)=>{
+          const p=D.stale[c.dataIndex]; return p?('· '+p.pct+'% of Core'):'';}}}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
+        title:{display:true,text:t.axisStale}}}}
+  });
+  // Adopción de la última versión
+  charts.adopt = mkchart('adopt', {
+    type:'line',
+    data:{ labels:D.latestAdoption.map(p=>p.date),
+      datasets:[{ data:D.latestAdoption.map(p=>p.pct),
+        borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.10)',
+        fill:true,tension:.25,pointRadius:3 }]},
+    options:{responsive:true,maintainAspectRatio:false,
+      plugins:{legend:{display:false},
+        tooltip:{callbacks:{afterLabel:(c)=>{
+          const p=D.latestAdoption[c.dataIndex];
+          return p?('v'+p.version):'';}}}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
+        ticks:{callback:v=>v+'%'}}}}
   });
   if(D.wayback.length){
     charts.hist = mkchart('hist', {
