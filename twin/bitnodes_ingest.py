@@ -65,6 +65,9 @@ UA_HEADER = {"User-Agent": "adoption-twin-ingest/0.2 (research project)"}
 # '/Satoshi:29.0.0/'  -> Core 29.0.0
 # '/Satoshi:27.1.0/Knots:20240801/' -> Knots 27.1.0
 UA_RE = re.compile(r"/Satoshi:(?P<ver>[\d.]+)[^/]*/(?:(?P<knots>Knots)[^/]*/)?")
+# BIP-110 real (señalización activa): excluye 'BIP110-Theory' (mención)
+# y 'UASF-SegWit-BIP148' (SegWit 2017, no relacionado).
+BIP110_RE = re.compile(r"(?:UASF-)?BIP110(?!-Theory)|bip110", re.I)
 
 
 # ---------------------------------------------------------------------------
@@ -78,6 +81,11 @@ def parse_user_agent(ua: str) -> tuple[str, str]:
         return ("other", "unknown")
     impl = "knots" if m.group("knots") else "core"
     ver = m.group("ver").rstrip(".")
+    # Preservar la señal BIP-110 como sub-implementación (sin tocar el
+    # esquema). 'BIP110-Theory' NO cuenta: es mención, no enforcing.
+    _ua = ua or ""
+    if BIP110_RE.search(_ua) and "BIP110-Theory" not in _ua:
+        impl = impl + "-bip110"
     return (impl, ver)
 
 
