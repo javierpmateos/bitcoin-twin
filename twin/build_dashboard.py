@@ -228,7 +228,10 @@ def stale_series(con, source="bitnodes"):
 
 
 def latest_adoption_series(con, source="bitnodes"):
-    """Serie del % de la red Core en la versión major.minor más nueva vista."""
+    """Serie del % de la red Core en las DOS versiones major.minor más
+    nuevas vistas. Usar el top-2 (y no solo la más nueva) evita el número
+    engañosamente bajo cuando acaba de salir un release muy reciente que
+    casi nadie corre todavía: refleja mejor 'qué tan al día está la red'."""
     tss = [r[0] for r in con.execute(
         "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
         (source,)).fetchall()]
@@ -245,15 +248,18 @@ def latest_adoption_series(con, source="bitnodes"):
                  if normalize_impl(impl)[0] == "core"]
         if not cores:
             continue
-        # versión desplegable (major.minor) más nueva
+
         def mmkey(v):
             p = v.split(".")
             return (int(p[0]), int(p[1]) if len(p) > 1 else 0)
-        newest = max(mmkey(v) for v, _ in cores)
-        on_newest = sum(n for v, n in cores if mmkey(v) == newest)
+
+        mms = sorted({mmkey(v) for v, _ in cores}, reverse=True)[:2]
+        recent = sum(n for v, n in cores if mmkey(v) in mms)
         total = sum(n for _, n in cores)
-        label = f"{newest[0]}.{newest[1]}"
-        out.append({"date": day, "pct": round(100 * on_newest / total, 2)
+        labels = ".".join(str(m[1]) for m in mms)
+        newest = mms[0] if mms else (0, 0)
+        label = f"{newest[0]}.{newest[1]}+"
+        out.append({"date": day, "pct": round(100 * recent / total, 2)
                     if total else 0, "version": label})
     return out
 
@@ -467,7 +473,7 @@ const I18N = {
     staleHead: "The long tail · outdated nodes",
     staleNote: "Core nodes running versions at least three major releases behind the newest (or 0.x). Echoes the historical finding that a large fraction never updates — even years after a critical fix.",
     adoptHead: "Newest-version adoption",
-    adoptNote: "Share of Core nodes already on the newest deployable (major.minor) version seen in the network — the adoption model made visible on live data.",
+    adoptNote: "Share of Core nodes on the two newest deployable (major.minor) versions seen in the network — the adoption model made visible on live data.",
     srcHead: "Discrepancy between sources",
     srcNote: "Different crawlers see the network differently (coverage and methodology). Cross-checking sources, rather than trusting a single one, is part of the project's goal — single-source dependency is what left the ecosystem without data when bitnodes.io expired in May 2026.",
     srcCols: ["source", "date", "nodes seen"],
@@ -499,7 +505,7 @@ const I18N = {
     staleHead: "La cola larga · nodos desactualizados",
     staleNote: "Nodos Core en versiones al menos tres releases mayores por detrás de la más nueva (o 0.x). Refleja el hallazgo histórico de que una fracción grande nunca actualiza — incluso años después de un fix crítico.",
     adoptHead: "Adopción de la última versión",
-    adoptNote: "Cuota de nodos Core ya en la versión desplegable (major.minor) más nueva vista en la red — el modelo de adopción hecho visible sobre datos en vivo.",
+    adoptNote: "Cuota de nodos Core en las dos versiones desplegables (major.minor) más nuevas vistas en la red — el modelo de adopción hecho visible sobre datos en vivo.",
     srcHead: "Discrepancia entre fuentes",
     srcNote: "Distintos crawlers ven la red de forma distinta (cobertura y metodología). Cruzar fuentes, en vez de confiar en una sola, es parte del objetivo del proyecto — la fuente única fue lo que dejó al ecosistema sin datos cuando bitnodes.io expiró en mayo 2026.",
     srcCols: ["fuente", "fecha", "nodos vistos"],

@@ -1,0 +1,68 @@
+# .github/workflows/update-dashboard.yml
+#
+# Actualiza la telemetría y republica el dashboard SIN depender de tu PC.
+# Corre en los runners de GitHub (gratis para repos públicos).
+#
+# Qué hace, una vez por día:
+#   1. checkout del repo (incluye telemetry.db y wayback.db versionados)
+#   2. ingesta un snapshot fresco de mainnet
+#   3. regenera docs/index.html
+#   4. commitea telemetry.db + docs/ de vuelta al repo
+# GitHub Pages sirve la nueva versión automáticamente.
+#
+# NOTA sobre la base de datos: para que Actions pueda ingestar y acumular
+# historia, telemetry.db debe estar versionado en git (quitalo del
+# .gitignore). Es la fuente de verdad compartida entre tu PC y la nube.
+# Si preferís que tu PC y Actions no se pisen, elegí UNO como el que
+# ingesta (recomendado: Actions) y en el otro sólo mirá.
+
+name: Update dashboard
+
+on:
+  schedule:
+    # 12:00 UTC cada día (~09:00 en Argentina). Actions puede retrasarse
+    # unos minutos; para datos diarios es irrelevante.
+    - cron: "0 12 * * *"
+  workflow_dispatch:   # permite dispararlo a mano desde la pestaña Actions
+
+# Permite al workflow commitear de vuelta al repo.
+permissions:
+  contents: write
+
+# Evita corridas solapadas si una tarda.
+concurrency:
+  group: update-dashboard
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Ingest snapshot (bitnod.es)
+        working-directory: twin
+        run: python3 bitnodes_ingest.py ingest
+        continue-on-error: true   # si la fuente falla, igual regeneramos
+
+      - name: Rebuild dashboard
+        working-directory: twin
+        run: python3 build_dashboard.py --out ../docs/index.html
+
+      - name: Commit & push if changed
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add twin/telemetry.db docs/ || true
+          if git diff --cached --quiet; then
+            echo "Sin cambios que publicar."
+          else
+            git commit -m "auto: dashboard snapshot $(date -u +%Y-%m-%d)"
+            git push
+          fi

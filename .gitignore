@@ -4,4 +4,3 @@ __pycache__/
 data/*.db
 data/*.log
 *.csv
-telemetry.db
