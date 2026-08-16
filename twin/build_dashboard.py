@@ -253,10 +253,15 @@ def latest_adoption_series(con, source="bitnodes"):
             p = v.split(".")
             return (int(p[0]), int(p[1]) if len(p) > 1 else 0)
 
-        mms = sorted({mmkey(v) for v, _ in cores}, reverse=True)[:2]
-        recent = sum(n for v, n in cores if mmkey(v) in mms)
-        total = sum(n for _, n in cores)
-        labels = ".".join(str(m[1]) for m in mms)
+        # Excluir pseudo-versiones de desarrollo (builds de master se
+        # autoidentifican con minor .99, p. ej. 31.99): no son releases
+        # reales y distorsionan cuál es "la más nueva".
+        stable = [(v, n) for v, n in cores if mmkey(v)[1] != 99]
+        if not stable:
+            stable = cores
+        mms = sorted({mmkey(v) for v, _ in stable}, reverse=True)[:2]
+        recent = sum(n for v, n in stable if mmkey(v) in mms)
+        total = sum(n for _, n in cores)   # total sobre TODO Core
         newest = mms[0] if mms else (0, 0)
         label = f"{newest[0]}.{newest[1]}+"
         out.append({"date": day, "pct": round(100 * recent / total, 2)
