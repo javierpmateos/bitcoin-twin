@@ -46,9 +46,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Ingest snapshot (bitnod.es)
+      - name: Ingest snapshot (bitnod.es CSV dataset)
         working-directory: twin
-        run: python3 bitnodes_ingest.py ingest
+        run: |
+          # El CSV se publica ~semanalmente; ingestamos el de hoy y, por
+          # las dudas, los de los últimos días (los que falten dan 404 y
+          # se saltean; los ya guardados se ignoran).
+          python3 csv_ingest.py backfill --since "$(date -u -d '7 days ago' +%Y-%m-%d)" --step 1
         continue-on-error: true   # si la fuente falla, igual regeneramos
 
       - name: Rebuild dashboard
