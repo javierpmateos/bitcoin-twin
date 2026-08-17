@@ -89,3 +89,31 @@ wsl -d Ubuntu -- bash -c "cd ~/projects/bitcoin-twin/twin && python3 bitnodes_in
 ## Licencia
 
 MIT. Construido sobre Warnet (MIT) y Bitcoin Core (MIT).
+## Data sources & attribution
+
+This project consumes public network telemetry from several sources. Each
+is used in good faith, for open-source research, with attribution:
+
+- **Node telemetry — bitnod.es.** Reachable-node data (public IP addresses
+  and user agents observed on Bitcoin's public P2P network). These are
+  observations of a public network; the underlying facts are not
+  copyrightable. Accessed respectfully at roughly one request per day. A
+  planned milestone is to run our own crawler (based on the open-source
+  [`ayeowch/bitnodes`](https://github.com/ayeowch/bitnodes)) to obtain this
+  data first-hand and remove any third-party dependency.
+
+- **Version-distribution data — DSN Bitcoin Monitoring (KIT),** via
+  [`bitcoin-data/bitcoin-stats-archive`](https://github.com/bitcoin-data/bitcoin-stats-archive)
+  (branch `dsn-bitcoin-monitoring`). Licensed **CC BY 4.0** — used here with
+  attribution, as the license requires.
+
+- **Historical node distribution (2016–2019) — Internet Archive.**
+  Reconstructed from public web captures of earlier Bitnodes eras
+  (bitnodes.21.co, bitnodes.earn.com) preserved by the
+  [Wayback Machine](https://web.archive.org/). Used for non-commercial
+  research; recovered datasets are committed to this repository.
+
+This project is open-source (MIT). Data derived from CC BY 4.0 sources
+retains that attribution requirement. If you are a data source maintainer
+and have any concern about how your data is used here, please open an
+issue.
