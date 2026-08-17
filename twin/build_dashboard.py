@@ -721,9 +721,12 @@ document.querySelectorAll('#langToggle button').forEach(b=>{
 });
 
 // Idioma inicial: inglés por defecto; respeta ?lang=es o el navegador.
+// Idioma por defecto: SIEMPRE inglés. El español es opt-in vía el botón
+// o vía ?lang=es en la URL (útil para compartir el link ya en español).
+// No se autodetecta el idioma del navegador a propósito: el público
+// objetivo (dev de Bitcoin, grant) lee en inglés.
 const urlLang = new URLSearchParams(location.search).get('lang');
-const navLang = (navigator.language||'en').slice(0,2);
-applyLang(urlLang && I18N[urlLang] ? urlLang : (I18N[navLang] ? navLang : 'en'));
+applyLang(urlLang && I18N[urlLang] ? urlLang : 'en');
 if(!hasCharts) buildCharts(I18N[LANG]);  // dispara los avisos de "no chart"
 </script>
 </body>
