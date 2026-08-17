@@ -210,6 +210,11 @@ TEMPLATE = r"""<!DOCTYPE html>
   td.num{text-align:right;font-variant-numeric:tabular-nums}
   .foot{color:var(--muted);font-size:11px;margin-top:40px;max-width:80ch}
   .hint{font-size:10px;color:var(--muted);margin-top:6px;font-style:italic}
+  .localctrl{display:flex;align-items:flex-start;gap:10px;margin:-4px 0 14px;
+    flex-wrap:wrap}
+  .localctrl .clabel{padding-top:6px}
+  .globallabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--signal);opacity:.75;margin-right:4px}
 </style>
 </head>
 <body>
@@ -229,6 +234,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 
   <!-- Controles -->
   <div class="controls" id="controls">
+    <span class="globallabel" data-i18n="ctrlGlobal">Global</span>
     <div class="cgroup">
       <span class="clabel" data-i18n="ctrlRange">Range</span>
       <button class="chip range" data-days="7">7d</button>
@@ -242,10 +248,6 @@ TEMPLATE = r"""<!DOCTYPE html>
       <button class="chip impl knots on" data-impl="knots">Knots</button>
       <button class="chip impl bip110 on" data-impl="bip110">BIP-110</button>
       <button class="chip impl other on" data-impl="other" data-i18n="ctrlOther">Other</button>
-    </div>
-    <div class="cgroup">
-      <span class="clabel" data-i18n="ctrlVersions">Compare versions</span>
-      <select id="verSelect" multiple size="4" title="Ctrl/Cmd + click for multiple"></select>
     </div>
     <button class="reset" id="resetBtn" data-i18n="ctrlReset">reset</button>
   </div>
@@ -280,8 +282,13 @@ TEMPLATE = r"""<!DOCTYPE html>
   <!-- Comparación de versiones -->
   <section id="verSection">
     <h2 data-i18n="verHead">Version comparison over time</h2>
+    <div class="localctrl">
+      <span class="clabel" data-i18n="ctrlVersions">Compare versions</span>
+      <select id="verSelect" multiple size="5" title="Ctrl/Cmd + click for multiple"></select>
+      <button class="chip" id="verClear" data-i18n="ctrlClear">clear</button>
+    </div>
     <div class="chartbox"><canvas id="verChart"></canvas></div>
-    <p class="note" data-i18n="verNote">Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.</p>
+    <p class="note" data-i18n="verNote">Select versions above to plot their share over time. Useful for watching a new release propagate while older ones decay. The global date range applies here too.</p>
   </section>
 
   <!-- Evolución -->
@@ -329,6 +336,7 @@ const I18N = {
     subtitle:"Synthetic replica calibrated against the live network · open data",
     ctrlRange:"Range", ctrlAll:"All", ctrlImpl:"Implementation",
     ctrlOther:"Other", ctrlVersions:"Compare versions", ctrlReset:"reset",
+    ctrlGlobal:"Global", ctrlClear:"clear",
     hintZoom:"Scroll to zoom on charts · drag to pan · double-click to reset zoom",
     bipHead:"BIP-110 signaling · UASF",
     bipWindow:"Flag-day window · August 2026",
@@ -341,7 +349,7 @@ const I18N = {
     statKnots:"Knots", statVersions:"distinct versions",
     distNote:"Top {n} deployable versions (major.minor) in the selected snapshot.",
     verHead:"Version comparison over time",
-    verNote:"Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.",
+    verNote:"Select versions above to plot their share over time. Useful for watching a new release propagate while older ones decay. The global date range applies here too.",
     verEmpty:"No versions selected — pick some in the control bar above.",
     evoHead:"Network evolution",
     evoNote:"Observed nodes by implementation, one point per day.",
@@ -365,6 +373,7 @@ const I18N = {
     subtitle:"Réplica sintética calibrada contra la red real · datos abiertos",
     ctrlRange:"Rango", ctrlAll:"Todo", ctrlImpl:"Implementación",
     ctrlOther:"Otros", ctrlVersions:"Comparar versiones", ctrlReset:"reiniciar",
+    ctrlGlobal:"Global", ctrlClear:"limpiar",
     hintZoom:"Rueda para zoom · arrastrar para desplazar · doble clic para reiniciar",
     bipHead:"Señalización BIP-110 · UASF",
     bipWindow:"Ventana de flag day · agosto 2026",
@@ -377,7 +386,7 @@ const I18N = {
     statKnots:"Knots", statVersions:"versiones distintas",
     distNote:"Top {n} versiones desplegables (major.minor) en el snapshot seleccionado.",
     verHead:"Comparación de versiones en el tiempo",
-    verNote:"Elegí versiones en la barra de control de arriba para graficar su cuota en el tiempo. Útil para ver propagarse un release nuevo mientras los viejos decaen.",
+    verNote:"Elegí versiones acá arriba para graficar su cuota en el tiempo. Útil para ver propagarse un release nuevo mientras los viejos decaen. El rango global también aplica.",
     verEmpty:"Ninguna versión seleccionada — elegí algunas en la barra de arriba.",
     evoHead:"Evolución de la red",
     evoNote:"Nodos observados por implementación, un punto por día.",
@@ -670,6 +679,11 @@ function initControls(){
   sel.addEventListener('change', ()=>{
     state.versions = new Set([...sel.selectedOptions].map(o=>o.value));
     rebuild();
+  });
+  const clr = document.getElementById('verClear');
+  if (clr) clr.addEventListener('click', ()=>{
+    [...sel.options].forEach(o=>o.selected=false);
+    state.versions = new Set(); rebuild();
   });
   document.querySelectorAll('.chip.range').forEach(b=>{
     b.addEventListener('click', ()=>{
