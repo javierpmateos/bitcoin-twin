@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """
-build_dashboard.py — genera un dashboard HTML autocontenido del gemelo.
+build_dashboard.py — dashboard HTML interactivo del gemelo Bitcoin.
 
-Lee telemetry.db (telemetría en vivo, multi-fuente) y wayback.db
-(historia 2016-2019 rescatada) y produce un único archivo HTML con todos
-los datos y gráficos embebidos (sin dependencias de red salvo la librería
-de charts por CDN). Abrilo en el navegador, subilo a GitHub Pages, o
-adjuntalo al grant.
+Lee telemetry.db (telemetría multi-fuente) y wayback.db (historia
+2016-2019 rescatada) y genera UN archivo HTML autocontenido con todos
+los datos embebidos y filtros interactivos:
 
-Sin servidor: es una FOTO de los datos al momento de generarlo. Para
-refrescarlo, volvé a correrlo:  python3 build_dashboard.py
+  - rango de fechas (7d / 30d / 90d / todo)
+  - filtro por implementación (Core / Knots / BIP-110 / otros)
+  - comparación de versiones específicas en el tiempo
+  - zoom y pan sobre los gráficos
 
-Salida: ../docs/dashboard.html
+Todo el filtrado ocurre en el navegador: el HTML lleva la serie completa
+por snapshot y por versión en formato compacto, y los gráficos y las
+métricas se recalculan al vuelo. No hay servidor ni llamadas de red
+(salvo las librerías por CDN).
+
+Salida: ../docs/index.html
 
 Uso:
     python3 build_dashboard.py
@@ -22,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sqlite3
 from datetime import datetime, timezone
 
@@ -35,323 +41,175 @@ def iso(ts):
 
 
 # ---------------------------------------------------------------------------
-# Extracción de datos
+# Extracción: serie completa por snapshot y versión, en formato compacto
 # ---------------------------------------------------------------------------
 
-def latest_snapshot(con, source="bitnodes"):
-    r = con.execute("SELECT MAX(ts) FROM snapshots WHERE source=?",
-                    (source,)).fetchone()
-    if not r or r[0] is None:
-        r = con.execute("SELECT MAX(ts) FROM snapshots").fetchone()
-    ts = r[0]
-    rows = con.execute(
-        "SELECT impl, version, count FROM version_counts WHERE ts=?",
-        (ts,)).fetchall()
-    return ts, rows
+def pick_source(con) -> tuple[str, str]:
+    """Elige la fuente primaria: prefiere el dataset CSV (más completo)."""
+    def has(src):
+        r = con.execute("SELECT COUNT(*) FROM snapshots WHERE source=?",
+                        (src,)).fetchone()
+        return r and r[0] > 0
+    if has("bitnodes-csv"):
+        return "bitnodes-csv", "bitnod.es (CSV dataset)"
+    return "bitnodes", "bitnod.es"
 
 
-def normalize_impl(impl):
-    """Colapsa sub-implementaciones para agrupar, preservando la marca."""
-    base = impl.replace("-bip110", "")
-    is_bip110 = impl.endswith("-bip110")
-    return base, is_bip110
+def full_series(con, source: str) -> dict:
+    """
+    Serie completa, un punto por día (último snapshot de cada fecha).
 
-
-def current_distribution(rows, top=12):
-    """Distribución por versión desplegable (major.minor), top N."""
-    agg = {}
-    total = 0
-    for impl, ver, n in rows:
-        base, _ = normalize_impl(impl)
-        mm = ".".join(ver.split(".")[:2])
-        label = f"{base} {mm}"
-        agg[label] = agg.get(label, 0) + n
-        total += n
-    ranked = sorted(agg.items(), key=lambda kv: -kv[1])[:top]
-    return ranked, total
-
-
-def impl_split(rows):
-    """Core vs Knots vs otros, en el último snapshot."""
-    d = {"core": 0, "knots": 0, "other": 0}
-    for impl, _, n in rows:
-        base, _ = normalize_impl(impl)
-        d[base if base in d else "other"] = d.get(base, 0) + n
-    return d
-
-
-def bip110_count(rows):
-    knots = core = 0
-    for impl, _, n in rows:
-        if impl.endswith("-bip110"):
-            if impl.startswith("knots"):
-                knots += n
-            else:
-                core += n
-    return knots, core
-
-
-def timeseries(con, source="bitnodes"):
-    """Serie temporal: un punto por DÍA (el último snapshot de cada fecha),
-    con total y desglose core/knots/bip110. Agrupar por día evita el eje X
-    con fechas repetidas cuando hay varios snapshots el mismo día."""
+    Formato compacto para no inflar el HTML:
+      vk    : ["core|31.0.0", "knots|29.3.0", ...]  (catálogo de versiones)
+      snaps : [{"d": "2026-05-20", "c": [[idx, n], ...]}, ...]
+    El navegador reconstruye todo desde acá.
+    """
     tss = [r[0] for r in con.execute(
         "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
         (source,)).fetchall()]
-    # Quedarse con el ts más alto (más tardío) de cada fecha.
     by_day = {}
     for ts in tss:
-        by_day[iso(ts)] = ts   # como tss está ordenado asc, gana el último
-    out = []
+        by_day[iso(ts)] = ts          # gana el último ts de cada día
+
+    vk_index: dict[str, int] = {}
+    snaps = []
     for day in sorted(by_day):
         ts = by_day[day]
         rows = con.execute(
-            "SELECT impl, count FROM version_counts WHERE ts=?",
+            "SELECT impl, version, count FROM version_counts WHERE ts=?",
             (ts,)).fetchall()
-        core = knots = bip = total = 0
-        for impl, n in rows:
-            total += n
-            if impl.endswith("-bip110"):
-                bip += n
-            base = impl.replace("-bip110", "")
-            if base == "core":
-                core += n
-            elif base == "knots":
-                knots += n
-        out.append({"date": day, "total": total, "core": core,
-                    "knots": knots, "bip110": bip})
-    return out
+        counts = []
+        for impl, ver, n in rows:
+            key = f"{impl}|{ver}"
+            idx = vk_index.get(key)
+            if idx is None:
+                idx = len(vk_index)
+                vk_index[key] = idx
+            counts.append([idx, n])
+        snaps.append({"d": day, "c": counts})
+
+    vk = [None] * len(vk_index)
+    for key, idx in vk_index.items():
+        vk[idx] = key
+    return {"vk": vk, "snaps": snaps}
 
 
-def source_compare(con):
-    """Último snapshot de cada fuente: total y share por versión Core."""
-    res = {}
+def source_totals(con) -> dict:
+    """Último total por fuente, para la tabla de discrepancias."""
+    out = {}
     for src in ("bitnodes-csv", "bitnodes", "dsn"):
         r = con.execute("SELECT MAX(ts) FROM snapshots WHERE source=?",
                         (src,)).fetchone()
         if not r or r[0] is None:
             continue
         ts = r[0]
-        rows = con.execute(
-            "SELECT impl, version, count FROM version_counts WHERE ts=?",
-            (ts,)).fetchall()
-        total = sum(n for _, _, n in rows)
-        by_mm = {}
-        for impl, ver, n in rows:
-            base, _ = normalize_impl(impl)
-            if base != "core":
-                continue
-            mm = ".".join(ver.split(".")[:2])
-            by_mm[mm] = by_mm.get(mm, 0) + n
-        res[src] = {"ts": iso(ts), "total": total,
-                    "share": {k: v / total for k, v in by_mm.items()}}
-    return res
+        tot = con.execute(
+            "SELECT SUM(count) FROM version_counts WHERE ts=?",
+            (ts,)).fetchone()[0] or 0
+        out[src] = {"ts": iso(ts), "total": tot}
+    return out
 
 
-def wayback_series(path):
-    """Serie histórica: tamaño de red estimado por snapshot (2016-2019)."""
+def wayback_series(path: str) -> list:
     try:
         con = con_ro(path)
+        rows = con.execute(
+            "SELECT ts, total FROM snapshots ORDER BY ts").fetchall()
     except sqlite3.OperationalError:
         return []
-    rows = con.execute(
-        "SELECT ts, total FROM snapshots ORDER BY ts").fetchall()
     return [{"date": iso(ts), "total": total} for ts, total in rows]
 
 
-def impl_share_series(con, source="bitnodes"):
-    """Serie temporal (un punto por día) del % Core vs Knots vs other."""
-    tss = [r[0] for r in con.execute(
-        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
-        (source,)).fetchall()]
-    by_day = {}
-    for ts in tss:
-        by_day[iso(ts)] = ts
-    out = []
-    for day in sorted(by_day):
-        ts = by_day[day]
-        rows = con.execute(
-            "SELECT impl, count FROM version_counts WHERE ts=?",
-            (ts,)).fetchall()
-        core = knots = other = total = 0
-        for impl, n in rows:
-            total += n
-            base = normalize_impl(impl)[0]
-            if base == "core":
-                core += n
-            elif base == "knots":
-                knots += n
-            else:
-                other += n
-        if total:
-            out.append({"date": day,
-                        "core": round(100 * core / total, 2),
-                        "knots": round(100 * knots / total, 2),
-                        "other": round(100 * other / total, 2)})
-    return out
-
-
-def _vk(ver):
-    try:
-        return tuple(int(x) for x in ver.split("."))
-    except ValueError:
-        return (-1,)
-
-
-def stale_series(con, source="bitnodes"):
-    """Serie del nº de nodos Core en versiones 'viejas' (major < actual-2).
-    Refleja la cola larga que nunca actualiza."""
-    tss = [r[0] for r in con.execute(
-        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
-        (source,)).fetchall()]
-    by_day = {}
-    for ts in tss:
-        by_day[iso(ts)] = ts
-    out = []
-    for day in sorted(by_day):
-        ts = by_day[day]
-        rows = con.execute(
-            "SELECT impl, version, count FROM version_counts WHERE ts=?",
-            (ts,)).fetchall()
-        cores = [(v, n) for impl, v, n in rows
-                 if normalize_impl(impl)[0] == "core"]
-        if not cores:
-            continue
-        newest_major = max(_vk(v)[0] for v, _ in cores)
-        # "viejo" = major al menos 3 por debajo del más nuevo, o serie 0.x
-        stale = sum(n for v, n in cores
-                    if _vk(v)[0] < newest_major - 2 or _vk(v)[0] == 0)
-        total = sum(n for _, n in cores)
-        out.append({"date": day, "stale": stale,
-                    "pct": round(100 * stale / total, 2) if total else 0})
-    return out
-
-
-def latest_adoption_series(con, source="bitnodes"):
-    """Serie del % de la red Core en las DOS versiones major.minor más
-    nuevas vistas. Usar el top-2 (y no solo la más nueva) evita el número
-    engañosamente bajo cuando acaba de salir un release muy reciente que
-    casi nadie corre todavía: refleja mejor 'qué tan al día está la red'."""
-    tss = [r[0] for r in con.execute(
-        "SELECT DISTINCT ts FROM snapshots WHERE source=? ORDER BY ts",
-        (source,)).fetchall()]
-    by_day = {}
-    for ts in tss:
-        by_day[iso(ts)] = ts
-    out = []
-    for day in sorted(by_day):
-        ts = by_day[day]
-        rows = con.execute(
-            "SELECT impl, version, count FROM version_counts WHERE ts=?",
-            (ts,)).fetchall()
-        cores = [(v, n) for impl, v, n in rows
-                 if normalize_impl(impl)[0] == "core"]
-        if not cores:
-            continue
-
-        def mmkey(v):
-            p = v.split(".")
-            return (int(p[0]), int(p[1]) if len(p) > 1 else 0)
-
-        # Excluir pseudo-versiones de desarrollo (builds de master se
-        # autoidentifican con minor .99, p. ej. 31.99): no son releases
-        # reales y distorsionan cuál es "la más nueva".
-        stable = [(v, n) for v, n in cores if mmkey(v)[1] != 99]
-        if not stable:
-            stable = cores
-        mms = sorted({mmkey(v) for v, _ in stable}, reverse=True)[:2]
-        recent = sum(n for v, n in stable if mmkey(v) in mms)
-        total = sum(n for _, n in cores)   # total sobre TODO Core
-        newest = mms[0] if mms else (0, 0)
-        label = f"{newest[0]}.{newest[1]}+"
-        out.append({"date": day, "pct": round(100 * recent / total, 2)
-                    if total else 0, "version": label})
-    return out
-
-
 # ---------------------------------------------------------------------------
-# Render
+# Template
 # ---------------------------------------------------------------------------
-
-def build_html(data: dict) -> str:
-    payload = json.dumps(data)
-    # El HTML/CSS/JS va en un solo archivo. Chart.js por CDN.
-    return TEMPLATE.replace("__PAYLOAD__", payload)
-
 
 TEMPLATE = r"""<!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bitcoin Network Twin — Panel</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --line:#21262d; --ink:#e6edf3;
     --muted:#8b949e; --core:#4493f8; --knots:#bc8cff; --signal:#f0a020;
-    --signal-dim:#5a4213; --grid:#1c2128;
+    --other:#6e7681; --grid:#1c2128;
   }
   *{box-sizing:border-box}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
+  body{margin:0;background:var(--bg);color:var(--ink);
     font-family:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
-    line-height:1.5; -webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:1080px; margin:0 auto; padding:32px 20px 80px}
-  header{border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:8px}
-  h1{font-size:20px; font-weight:600; letter-spacing:-.01em; margin:0 0 4px}
-  .sub{color:var(--muted); font-size:13px}
-  .eyebrow{color:var(--signal); font-size:11px; letter-spacing:.14em;
-    text-transform:uppercase; margin-bottom:14px}
-  .stamp{color:var(--muted); font-size:11px; margin-top:6px}
-  section{padding:34px 0; border-bottom:1px solid var(--line)}
-  h2{font-size:12px; letter-spacing:.12em; text-transform:uppercase;
-    color:var(--muted); font-weight:600; margin:0 0 18px}
-  .stat-row{display:flex; flex-wrap:wrap; gap:28px; margin-bottom:8px}
-  .stat .n{font-size:30px; font-weight:600; letter-spacing:-.02em}
-  .stat .l{font-size:12px; color:var(--muted); margin-top:2px}
-  .chartbox{position:relative; height:300px; margin-top:8px}
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:20px}
+  h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px}
+  .eyebrow{color:var(--signal);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;margin-bottom:14px}
+  .stamp{color:var(--muted);font-size:11px;margin-top:6px}
+  .topbar{display:flex;justify-content:space-between;align-items:center}
+  .langtoggle{display:flex;border:1px solid var(--line);border-radius:6px;
+    overflow:hidden}
+  .langtoggle button{background:transparent;color:var(--muted);border:0;
+    padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer}
+  .langtoggle button.active{background:var(--line);color:var(--ink)}
+  section{padding:34px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;margin:0 0 18px}
+  .stat-row{display:flex;flex-wrap:wrap;gap:28px;margin-bottom:8px}
+  .stat .n{font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .chartbox{position:relative;height:300px;margin-top:8px}
   .chartbox.tall{height:340px}
-  .note{color:var(--muted); font-size:12px; margin-top:14px; max-width:70ch}
-  /* Apartado BIP-110 destacado */
-  .signal-panel{
-    background:linear-gradient(180deg, #1a1408 0%, var(--panel) 100%);
-    border:1px solid var(--signal-dim); border-radius:10px; padding:26px 24px;
-    margin-top:4px;
-  }
-  .signal-panel .live{
-    display:inline-flex; align-items:center; gap:7px; font-size:11px;
-    letter-spacing:.1em; text-transform:uppercase; color:var(--signal);
-  }
-  .dot{width:8px; height:8px; border-radius:50%; background:var(--signal);
-    box-shadow:0 0 0 0 rgba(240,160,32,.6); animation:pulse 2s infinite}
-  @keyframes pulse{
-    0%{box-shadow:0 0 0 0 rgba(240,160,32,.5)}
+  .note{color:var(--muted);font-size:12px;margin-top:14px;max-width:70ch}
+  /* Barra de controles */
+  .controls{position:sticky;top:0;z-index:20;background:rgba(13,17,23,.94);
+    backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;margin:18px 0 4px;display:flex;flex-wrap:wrap;
+    gap:18px;align-items:center}
+  .cgroup{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .clabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted)}
+  .chip{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:3px 11px;font-family:inherit;font-size:11px;
+    cursor:pointer;transition:all .12s}
+  .chip:hover{color:var(--ink);border-color:var(--muted)}
+  .chip.on{background:var(--line);color:var(--ink);border-color:var(--muted)}
+  .chip.core.on{border-color:var(--core);color:var(--core)}
+  .chip.knots.on{border-color:var(--knots);color:var(--knots)}
+  .chip.bip110.on{border-color:var(--signal);color:var(--signal)}
+  .reset{margin-left:auto;font-size:10px;color:var(--muted);cursor:pointer;
+    background:none;border:0;font-family:inherit;text-decoration:underline}
+  select{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:4px 8px;font-family:inherit;font-size:11px;
+    max-width:260px}
+  /* Panel BIP-110 */
+  .signal-panel{background:linear-gradient(180deg,#1a1408 0%,var(--panel) 100%);
+    border:1px solid #5a4213;border-radius:10px;padding:26px 24px}
+  .signal-panel .live{display:inline-flex;align-items:center;gap:7px;
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--signal)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);
+    animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,160,32,.5)}
     70%{box-shadow:0 0 0 9px rgba(240,160,32,0)}
-    100%{box-shadow:0 0 0 0 rgba(240,160,32,0)}
-  }
+    100%{box-shadow:0 0 0 0 rgba(240,160,32,0)}}
   @media (prefers-reduced-motion:reduce){.dot{animation:none}}
-  .signal-big{font-size:52px; font-weight:700; letter-spacing:-.03em;
-    color:var(--signal); line-height:1; margin:14px 0 4px}
-  .signal-grid{display:flex; flex-wrap:wrap; gap:26px; margin-top:18px}
-  .signal-grid .n{font-size:20px; font-weight:600}
-  .signal-grid .l{font-size:11px; color:var(--muted)}
-  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px}
-  th,td{text-align:left; padding:7px 10px; border-bottom:1px solid var(--grid)}
-  th{color:var(--muted); font-weight:500; font-size:11px;
-    letter-spacing:.06em; text-transform:uppercase}
-  td.num{text-align:right; font-variant-numeric:tabular-nums}
-  .foot{color:var(--muted); font-size:11px; margin-top:40px; max-width:80ch}
-  a{color:var(--core); text-decoration:none}
-  .topbar{display:flex; justify-content:space-between; align-items:center}
-  .langtoggle{display:flex; gap:2px; border:1px solid var(--line);
-    border-radius:6px; overflow:hidden}
-  .langtoggle button{background:transparent; color:var(--muted); border:0;
-    padding:4px 10px; font-family:inherit; font-size:11px; cursor:pointer;
-    letter-spacing:.05em}
-  .langtoggle button.active{background:var(--line); color:var(--ink)}
-  .langtoggle button:hover{color:var(--ink)}
+  .signal-big{font-size:52px;font-weight:700;letter-spacing:-.03em;
+    color:var(--signal);line-height:1;margin:14px 0 4px}
+  .signal-grid{display:flex;flex-wrap:wrap;gap:26px;margin-top:18px}
+  .signal-grid .n{font-size:20px;font-weight:600}
+  .signal-grid .l{font-size:11px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--grid)}
+  th{color:var(--muted);font-weight:500;font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .foot{color:var(--muted);font-size:11px;margin-top:40px;max-width:80ch}
+  .hint{font-size:10px;color:var(--muted);margin-top:6px;font-style:italic}
 </style>
 </head>
 <body>
@@ -369,88 +227,96 @@ TEMPLATE = r"""<!DOCTYPE html>
     <div class="stamp" id="stamp"></div>
   </header>
 
-  <!-- BIP-110: la firma de la página -->
+  <!-- Controles -->
+  <div class="controls" id="controls">
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlRange">Range</span>
+      <button class="chip range" data-days="7">7d</button>
+      <button class="chip range" data-days="30">30d</button>
+      <button class="chip range" data-days="90">90d</button>
+      <button class="chip range on" data-days="0" data-i18n="ctrlAll">All</button>
+    </div>
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlImpl">Implementation</span>
+      <button class="chip impl core on" data-impl="core">Core</button>
+      <button class="chip impl knots on" data-impl="knots">Knots</button>
+      <button class="chip impl bip110 on" data-impl="bip110">BIP-110</button>
+      <button class="chip impl other on" data-impl="other" data-i18n="ctrlOther">Other</button>
+    </div>
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlVersions">Compare versions</span>
+      <select id="verSelect" multiple size="4" title="Ctrl/Cmd + click for multiple"></select>
+    </div>
+    <button class="reset" id="resetBtn" data-i18n="ctrlReset">reset</button>
+  </div>
+  <div class="hint" data-i18n="hintZoom">Scroll to zoom on charts · drag to pan · double-click to reset zoom</div>
+
+  <!-- BIP-110 -->
   <section>
     <h2 data-i18n="bipHead">BIP-110 signaling · UASF</h2>
     <div class="signal-panel">
       <span class="live"><span class="dot"></span> <span data-i18n="bipWindow">Flag-day window · August 2026</span></span>
       <div class="signal-big" id="bipPct">—</div>
-      <div class="l" style="color:var(--muted);font-size:12px" data-i18n="bipCaption">
-        of the network signals BIP-110 (nodes with a UASF-BIP110 user agent)</div>
+      <div style="color:var(--muted);font-size:12px" data-i18n="bipCaption">
+        of observed nodes run BIP-110 signaling software</div>
       <div class="signal-grid">
         <div><div class="n" id="bipKnots">—</div><div class="l" data-i18n="viaKnots">via Bitcoin Knots</div></div>
         <div><div class="n" id="bipCore">—</div><div class="l" data-i18n="viaCore">via patched Core</div></div>
-        <div><div class="n" id="bipTotal">—</div><div class="l" data-i18n="totalMeasured">total nodes measured</div></div>
+        <div><div class="n" id="bipTotal">—</div><div class="l" data-i18n="totalMeasured">nodes in snapshot</div></div>
       </div>
-      <p class="note" data-i18n="bipNote">
-        Own measurement over reachable user agents. Counts only active
-        signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory
-        mentions and the historical UASF-SegWit-BIP148 from 2017. The time
-        series begins the day the parser started preserving the marker.
-      </p>
+      <p class="note" data-i18n="bipNote">Own measurement over observed user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. Node software signaling — not miner block signaling, which is a separate metric.</p>
     </div>
     <div class="chartbox" style="margin-top:24px"><canvas id="bipTs"></canvas></div>
   </section>
 
   <!-- Estado actual -->
   <section>
-    <h2 data-i18n="todayHead">The network today</h2>
+    <h2 data-i18n="todayHead">Snapshot</h2>
     <div class="stat-row" id="statRow"></div>
     <div class="chartbox tall"><canvas id="dist"></canvas></div>
     <p class="note" id="distNote"></p>
+  </section>
+
+  <!-- Comparación de versiones -->
+  <section id="verSection">
+    <h2 data-i18n="verHead">Version comparison over time</h2>
+    <div class="chartbox"><canvas id="verChart"></canvas></div>
+    <p class="note" data-i18n="verNote">Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.</p>
   </section>
 
   <!-- Evolución -->
   <section>
     <h2 data-i18n="evoHead">Network evolution</h2>
     <div class="chartbox"><canvas id="evo"></canvas></div>
-    <p class="note" data-i18n="evoNote">Reachable nodes by implementation, one point per day.
-      Short window for now: the series grows daily.</p>
+    <p class="note" data-i18n="evoNote">Observed nodes by implementation, one point per day.</p>
   </section>
 
   <!-- Core vs Knots -->
   <section>
-    <h2 data-i18n="ckHead">Core vs Knots · share over time</h2>
+    <h2 data-i18n="ckHead">Implementation share over time</h2>
     <div class="chartbox"><canvas id="ck"></canvas></div>
-    <p class="note" data-i18n="ckNote">Percentage of the reachable network running each
-      implementation. Knots' share is closely watched amid the BIP-110 debate.</p>
+    <p class="note" data-i18n="ckNote">Percentage of observed nodes running each implementation.</p>
   </section>
 
   <!-- Cola larga -->
   <section>
     <h2 data-i18n="staleHead">The long tail · outdated nodes</h2>
     <div class="chartbox"><canvas id="stale"></canvas></div>
-    <p class="note" data-i18n="staleNote">Core nodes running versions at least three major
-      releases behind the newest (or 0.x). Echoes the historical finding that a
-      large fraction never updates — even years after a critical fix.</p>
-  </section>
-
-  <!-- Adopción última versión -->
-  <section>
-    <h2 data-i18n="adoptHead">Newest-version adoption</h2>
-    <div class="chartbox"><canvas id="adopt"></canvas></div>
-    <p class="note" data-i18n="adoptNote">Share of Core nodes already on the newest deployable
-      (major.minor) version seen in the network — the adoption model made visible on live data.</p>
+    <p class="note" data-i18n="staleNote">Core nodes running releases at least three major versions behind the newest (or 0.x).</p>
   </section>
 
   <!-- Fuentes -->
   <section>
     <h2 data-i18n="srcHead">Discrepancy between sources</h2>
     <div id="srcWrap"></div>
-    <p class="note" data-i18n="srcNote">Different crawlers see the network differently
-      (coverage and methodology). Cross-checking sources, rather than trusting a
-      single one, is part of the project's goal — single-source dependency is
-      what left the ecosystem without data when bitnodes.io expired in May 2026.</p>
+    <p class="note" data-i18n="srcNote">Different crawlers see the network differently (coverage and methodology). Every node count is an observation, not a census.</p>
   </section>
 
   <!-- Historia -->
   <section>
     <h2 data-i18n="histHead">Recovered history · 2016–2019</h2>
     <div class="chartbox"><canvas id="hist"></canvas></div>
-    <p class="note" data-i18n="histNote">Reachable-network size reconstructed from Internet
-      Archive captures (bitnodes.21.co and earn.com eras), a dataset that had
-      been lost. Basis for the model's historical calibrations (e.g. adoption
-      of the CVE-2018-17144 fix).</p>
+    <p class="note" data-i18n="histNote">Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.</p>
   </section>
 
   <div class="foot" id="foot"></div>
@@ -459,275 +325,390 @@ TEMPLATE = r"""<!DOCTYPE html>
 <script>
 const I18N = {
   en: {
-    title: "Telemetry & adoption panel",
-    subtitle: "Synthetic replica calibrated against the live network · open data",
-    bipHead: "BIP-110 signaling · UASF",
-    bipWindow: "Flag-day window · August 2026",
-    bipCaption: "of the network signals BIP-110 (nodes with a UASF-BIP110 user agent)",
-    viaKnots: "via Bitcoin Knots", viaCore: "via patched Core",
-    totalMeasured: "total nodes measured",
-    bipNote: "Own measurement over reachable user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. The time series begins the day the parser started preserving the marker.",
-    todayHead: "The network today",
-    statNodes: "reachable nodes", statDominant: "dominant version",
-    statKnots: "Knots", statVersions: "distinct versions",
-    distNote: "Top {n} deployable versions (major.minor). Core in blue, Knots in purple.",
-    evoHead: "Network evolution",
-    evoNote: "Reachable nodes by implementation, one point per day. Short window for now: the series grows daily.",
-    ckHead: "Core vs Knots · share over time",
-    ckNote: "Percentage of the reachable network running each implementation. Knots' share is closely watched amid the BIP-110 debate.",
-    staleHead: "The long tail · outdated nodes",
-    staleNote: "Core nodes running versions at least three major releases behind the newest (or 0.x). Echoes the historical finding that a large fraction never updates — even years after a critical fix.",
-    adoptHead: "Newest-version adoption",
-    adoptNote: "Share of Core nodes on the two newest deployable (major.minor) versions seen in the network — the adoption model made visible on live data.",
-    srcHead: "Discrepancy between sources",
-    srcNote: "Different crawlers see the network differently (coverage and methodology). Cross-checking sources, rather than trusting a single one, is part of the project's goal — single-source dependency is what left the ecosystem without data when bitnodes.io expired in May 2026.",
-    srcCols: ["source", "date", "nodes seen"],
-    srcOne: "Only one source has data so far. Run dsn_ingest.py ingest to populate the comparison.",
-    histHead: "Recovered history · 2016–2019",
-    histNote: "Reachable-network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had been lost. Basis for the model's historical calibrations (e.g. adoption of the CVE-2018-17144 fix).",
-    generated: "Generated", source: "source",
-    noChart: "(chart unavailable without the charts library)",
-    foot: "Data: bitnod.es and DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. This panel is a static snapshot generated on {d}; regenerate with build_dashboard.py. Open-source project (MIT).",
-    axisSignaling: "signaling nodes", axisStale: "outdated nodes"
+    title:"Telemetry & adoption panel",
+    subtitle:"Synthetic replica calibrated against the live network · open data",
+    ctrlRange:"Range", ctrlAll:"All", ctrlImpl:"Implementation",
+    ctrlOther:"Other", ctrlVersions:"Compare versions", ctrlReset:"reset",
+    hintZoom:"Scroll to zoom on charts · drag to pan · double-click to reset zoom",
+    bipHead:"BIP-110 signaling · UASF",
+    bipWindow:"Flag-day window · August 2026",
+    bipCaption:"of observed nodes run BIP-110 signaling software",
+    viaKnots:"via Bitcoin Knots", viaCore:"via patched Core",
+    totalMeasured:"nodes in snapshot",
+    bipNote:"Own measurement over observed user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. Node software signaling — not miner block signaling, which is a separate metric.",
+    todayHead:"Snapshot",
+    statNodes:"observed nodes", statDominant:"dominant version",
+    statKnots:"Knots", statVersions:"distinct versions",
+    distNote:"Top {n} deployable versions (major.minor) in the selected snapshot.",
+    verHead:"Version comparison over time",
+    verNote:"Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.",
+    verEmpty:"No versions selected — pick some in the control bar above.",
+    evoHead:"Network evolution",
+    evoNote:"Observed nodes by implementation, one point per day.",
+    ckHead:"Implementation share over time",
+    ckNote:"Percentage of observed nodes running each implementation.",
+    staleHead:"The long tail · outdated nodes",
+    staleNote:"Core nodes running releases at least three major versions behind the newest (or 0.x).",
+    srcHead:"Discrepancy between sources",
+    srcNote:"Different crawlers see the network differently (coverage and methodology). Every node count is an observation, not a census.",
+    srcCols:["source","date","nodes seen"],
+    histHead:"Recovered history · 2016–2019",
+    histNote:"Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.",
+    generated:"Generated", source:"source",
+    axisSignaling:"signaling nodes", axisStale:"outdated nodes",
+    axisShare:"share of observed nodes",
+    noChart:"(chart unavailable without the charts library)",
+    foot:"Data: bitnod.es public CSV datasets, DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. Static snapshot generated {d}; regenerate with build_dashboard.py. Open-source (MIT)."
   },
   es: {
-    title: "Panel de telemetría y adopción",
-    subtitle: "Réplica sintética calibrada contra la red real · datos abiertos",
-    bipHead: "Señalización BIP-110 · UASF",
-    bipWindow: "Ventana de flag day · agosto 2026",
-    bipCaption: "de la red señaliza BIP-110 (nodos con user agent UASF-BIP110)",
-    viaKnots: "vía Bitcoin Knots", viaCore: "vía Core parcheado",
-    totalMeasured: "nodos totales medidos",
-    bipNote: "Medición propia sobre user agents alcanzables. Cuenta sólo señalización activa (UASF-BIP110 / bip110-v*); excluye menciones BIP110-Theory y el histórico UASF-SegWit-BIP148 de 2017. La serie temporal arranca el día en que el parser comenzó a preservar la marca.",
-    todayHead: "La red hoy",
-    statNodes: "nodos alcanzables", statDominant: "versión dominante",
-    statKnots: "Knots", statVersions: "versiones distintas",
-    distNote: "Top {n} versiones desplegables (major.minor). Core en azul, Knots en violeta.",
-    evoHead: "Evolución de la red",
-    evoNote: "Nodos alcanzables por implementación, un punto por día. Ventana corta por ahora: la serie crece a diario.",
-    ckHead: "Core vs Knots · cuota en el tiempo",
-    ckNote: "Porcentaje de la red alcanzable que corre cada implementación. La cuota de Knots es muy observada en medio del debate BIP-110.",
-    staleHead: "La cola larga · nodos desactualizados",
-    staleNote: "Nodos Core en versiones al menos tres releases mayores por detrás de la más nueva (o 0.x). Refleja el hallazgo histórico de que una fracción grande nunca actualiza — incluso años después de un fix crítico.",
-    adoptHead: "Adopción de la última versión",
-    adoptNote: "Cuota de nodos Core en las dos versiones desplegables (major.minor) más nuevas vistas en la red — el modelo de adopción hecho visible sobre datos en vivo.",
-    srcHead: "Discrepancia entre fuentes",
-    srcNote: "Distintos crawlers ven la red de forma distinta (cobertura y metodología). Cruzar fuentes, en vez de confiar en una sola, es parte del objetivo del proyecto — la fuente única fue lo que dejó al ecosistema sin datos cuando bitnodes.io expiró en mayo 2026.",
-    srcCols: ["fuente", "fecha", "nodos vistos"],
-    srcOne: "Sólo una fuente con datos por ahora. Corré dsn_ingest.py ingest para poblar la comparación.",
-    histHead: "Historia rescatada · 2016–2019",
-    histNote: "Tamaño de la red alcanzable reconstruido desde capturas del Internet Archive (eras bitnodes.21.co y earn.com), un dataset que se había perdido. Base de las calibraciones históricas del modelo (p. ej. la adopción del fix del CVE-2018-17144).",
-    generated: "Generado", source: "fuente",
-    noChart: "(gráfico no disponible sin la librería de charts)",
-    foot: "Datos: bitnod.es y DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Este panel es una foto estática generada el {d}; regenerar con build_dashboard.py. Proyecto open-source (MIT).",
-    axisSignaling: "nodos señalizando", axisStale: "nodos desactualizados"
+    title:"Panel de telemetría y adopción",
+    subtitle:"Réplica sintética calibrada contra la red real · datos abiertos",
+    ctrlRange:"Rango", ctrlAll:"Todo", ctrlImpl:"Implementación",
+    ctrlOther:"Otros", ctrlVersions:"Comparar versiones", ctrlReset:"reiniciar",
+    hintZoom:"Rueda para zoom · arrastrar para desplazar · doble clic para reiniciar",
+    bipHead:"Señalización BIP-110 · UASF",
+    bipWindow:"Ventana de flag day · agosto 2026",
+    bipCaption:"de los nodos observados corre software que señaliza BIP-110",
+    viaKnots:"vía Bitcoin Knots", viaCore:"vía Core parcheado",
+    totalMeasured:"nodos en el snapshot",
+    bipNote:"Medición propia sobre user agents observados. Cuenta sólo señalización activa (UASF-BIP110 / bip110-v*); excluye menciones BIP110-Theory y el histórico UASF-SegWit-BIP148 de 2017. Señalización por software de nodos — no señalización de bloques por mineros, que es una métrica distinta.",
+    todayHead:"Snapshot",
+    statNodes:"nodos observados", statDominant:"versión dominante",
+    statKnots:"Knots", statVersions:"versiones distintas",
+    distNote:"Top {n} versiones desplegables (major.minor) en el snapshot seleccionado.",
+    verHead:"Comparación de versiones en el tiempo",
+    verNote:"Elegí versiones en la barra de control de arriba para graficar su cuota en el tiempo. Útil para ver propagarse un release nuevo mientras los viejos decaen.",
+    verEmpty:"Ninguna versión seleccionada — elegí algunas en la barra de arriba.",
+    evoHead:"Evolución de la red",
+    evoNote:"Nodos observados por implementación, un punto por día.",
+    ckHead:"Cuota por implementación en el tiempo",
+    ckNote:"Porcentaje de nodos observados que corre cada implementación.",
+    staleHead:"La cola larga · nodos desactualizados",
+    staleNote:"Nodos Core en releases al menos tres versiones mayores por detrás de la más nueva (o 0.x).",
+    srcHead:"Discrepancia entre fuentes",
+    srcNote:"Distintos crawlers ven la red de forma distinta (cobertura y metodología). Todo conteo de nodos es una observación, no un censo.",
+    srcCols:["fuente","fecha","nodos vistos"],
+    histHead:"Historia rescatada · 2016–2019",
+    histNote:"Tamaño observado de la red reconstruido desde capturas del Internet Archive (eras bitnodes.21.co y earn.com), un dataset que se había vuelto inaccesible.",
+    generated:"Generado", source:"fuente",
+    axisSignaling:"nodos señalizando", axisStale:"nodos desactualizados",
+    axisShare:"cuota de nodos observados",
+    noChart:"(gráfico no disponible sin la librería de charts)",
+    foot:"Datos: datasets CSV públicos de bitnod.es, DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Foto estática generada el {d}; regenerar con build_dashboard.py. Open-source (MIT)."
   }
 };
-let LANG = "en";
+
 const D = __PAYLOAD__;
+let LANG = "en";
+const state = { days: 0, impls: new Set(["core","knots","bip110","other"]),
+                versions: new Set() };
+
 const C = getComputedStyle(document.documentElement);
 const col = n => C.getPropertyValue(n).trim();
 const fmt = n => n.toLocaleString('en-US');
 const hasCharts = (typeof Chart !== 'undefined');
+if (hasCharts && typeof ChartZoom !== 'undefined') {
+  try { Chart.register(ChartZoom); } catch(e){}
+}
 if (hasCharts) {
   Chart.defaults.color = col('--muted');
   Chart.defaults.font.family = "ui-monospace, monospace";
   Chart.defaults.font.size = 11;
 }
 const gridc = col('--grid');
-// Helper: crear chart sólo si la librería cargó; si no, mostrar aviso.
-function chart(id, cfg){
-  const el = document.getElementById(id);
-  if(!el) return;
-  if(!hasCharts){
-    const p=document.createElement('div'); p.className='note';
-    p.textContent='(gráfico no disponible sin conexión a la librería de charts)';
-    el.replaceWith(p); return;
+let charts = {};
+
+// ---- helpers de datos -----------------------------------------------------
+// vk: "impl|version"  ->  {impl, base, ver, mm}
+const VK = D.series.vk.map(k => {
+  const [impl, ver] = k.split("|");
+  const base = impl.endsWith("-bip110") ? "bip110"
+             : (impl === "core" || impl === "knots") ? impl : "other";
+  const p = ver.split(".");
+  const mm = (p.length > 1) ? p[0] + "." + p[1] : ver;
+  const implBase = impl.replace("-bip110","");
+  return { impl, implBase, base, ver, mm, label: implBase + " " + mm };
+});
+
+function snapsInRange(){
+  const s = D.series.snaps;
+  if (!state.days) return s;
+  return s.slice(Math.max(0, s.length - state.days));
+}
+function implOK(v){ return state.impls.has(v.base); }
+
+// Agrega un snapshot: devuelve {total, byBase, byLabel, bip:{knots,core}}
+function agg(sn){
+  let total = 0; const byBase = {core:0,knots:0,bip110:0,other:0};
+  const byLabel = {}; let bipK = 0, bipC = 0; const mmSet = new Set();
+  const verCount = {};
+  for (const [idx, n] of sn.c){
+    const v = VK[idx];
+    if (!implOK(v)) continue;
+    total += n;
+    byBase[v.base] += n;
+    byLabel[v.label] = (byLabel[v.label]||0) + n;
+    verCount[v.implBase + " " + v.ver] = (verCount[v.implBase+" "+v.ver]||0)+n;
+    mmSet.add(v.implBase + " " + v.ver);
+    if (v.base === "bip110"){ if (v.implBase === "knots") bipK += n; else bipC += n; }
   }
-  new Chart(el, cfg);
+  return { total, byBase, byLabel, bip:{knots:bipK, core:bipC},
+           distinct: mmSet.size };
 }
 
-// --- valores numéricos (no dependen del idioma) ---
-document.getElementById('bipPct').textContent = D.bip.pct.toFixed(2) + '%';
-document.getElementById('bipKnots').textContent = fmt(D.bip.knots);
-document.getElementById('bipCore').textContent = fmt(D.bip.core);
-document.getElementById('bipTotal').textContent = fmt(D.bip.networkTotal);
+function mmKey(mm){ const p = mm.split("."); return [parseInt(p[0])||0, parseInt(p[1])||0]; }
 
-let charts = {};   // referencias para poder re-etiquetar al cambiar idioma
-
-function buildCharts(t){
-  Object.values(charts).forEach(c => { if(c && c.destroy) c.destroy(); });
-  charts = {};
-  const bipSeries = D.timeseries.filter(p => p.bip110 > 0);
-  charts.bip = mkchart('bipTs', {
-    type:'line',
-    data:{ labels:(bipSeries.length?bipSeries:D.timeseries).map(p=>p.date),
-      datasets:[{ data:(bipSeries.length?bipSeries:D.timeseries).map(p=>p.bip110),
-        borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.12)',
-        fill:true, tension:.25, pointRadius:3 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        title:{display:true,text:t.axisSignaling}}}}
-  });
-  charts.dist = mkchart('dist', {
-    type:'bar',
-    data:{ labels:D.distribution.map(d=>d[0]),
-      datasets:[{ data:D.distribution.map(d=>d[1]),
-        backgroundColor:D.distribution.map(d=>
-          d[0].startsWith('knots')?col('--knots'):
-          d[0].startsWith('core')?col('--core'):col('--muted')),
-        borderRadius:3 }]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{display:false}}}}
-  });
-  charts.evo = mkchart('evo', {
-    type:'line',
-    data:{ labels:D.timeseries.map(p=>p.date),
-      datasets:[
-        {label:'Core',data:D.timeseries.map(p=>p.core),
-         borderColor:col('--core'),tension:.25,pointRadius:2},
-        {label:'Knots',data:D.timeseries.map(p=>p.knots),
-         borderColor:col('--knots'),tension:.25,pointRadius:2}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{boxWidth:12}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true}}}
-  });
-  // Core vs Knots (% de la red)
-  charts.ck = mkchart('ck', {
-    type:'line',
-    data:{ labels:D.implShare.map(p=>p.date),
-      datasets:[
-        {label:'Core %',data:D.implShare.map(p=>p.core),
-         borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',
-         fill:true,tension:.25,pointRadius:2},
-        {label:'Knots %',data:D.implShare.map(p=>p.knots),
-         borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',
-         fill:true,tension:.25,pointRadius:2}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{boxWidth:12}}},
-      scales:{x:{grid:{color:gridc}},
-        y:{grid:{color:gridc},beginAtZero:true,
-          ticks:{callback:v=>v+'%'}}}}
-  });
-  // Cola larga (nodos en versiones viejas)
-  charts.stale = mkchart('stale', {
-    type:'line',
-    data:{ labels:D.stale.map(p=>p.date),
-      datasets:[{ label:t.staleHead, data:D.stale.map(p=>p.stale),
-        borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',
-        fill:true,tension:.25,pointRadius:2 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{afterLabel:(c)=>{
-          const p=D.stale[c.dataIndex]; return p?('· '+p.pct+'% of Core'):'';}}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        title:{display:true,text:t.axisStale}}}}
-  });
-  // Adopción de la última versión
-  charts.adopt = mkchart('adopt', {
-    type:'line',
-    data:{ labels:D.latestAdoption.map(p=>p.date),
-      datasets:[{ data:D.latestAdoption.map(p=>p.pct),
-        borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.10)',
-        fill:true,tension:.25,pointRadius:3 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{afterLabel:(c)=>{
-          const p=D.latestAdoption[c.dataIndex];
-          return p?('v'+p.version):'';}}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        ticks:{callback:v=>v+'%'}}}}
-  });
-  if(D.wayback.length){
-    charts.hist = mkchart('hist', {
-      type:'line',
-      data:{ labels:D.wayback.map(p=>p.date),
-        datasets:[{ data:D.wayback.map(p=>p.total), borderColor:col('--ink'),
-          backgroundColor:'rgba(230,237,243,.06)', fill:true,
-          tension:.2, pointRadius:2 }]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false}},
-        scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc}}}}
-    });
+// Cola larga: core con major <= newestMajor-3, o 0.x
+function staleOf(sn){
+  let stale = 0, coreTot = 0, newest = 0;
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (v.implBase !== "core") continue;
+    const M = mmKey(v.mm)[0];
+    if (mmKey(v.mm)[1] !== 99) newest = Math.max(newest, M);
+    coreTot += n;
   }
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (v.implBase !== "core") continue;
+    const M = mmKey(v.mm)[0];
+    if (M === 0 || M < newest - 2) stale += n;
+  }
+  return { stale, pct: coreTot ? 100*stale/coreTot : 0 };
 }
-// mkchart: como chart(), pero devuelve la instancia (o null) para destruir luego
-function mkchart(id, cfg){
+
+function shareOfVersion(sn, label){
+  let hit = 0, tot = 0;
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (!implOK(v)) continue;
+    tot += n;
+    if (v.label === label) hit += n;
+  }
+  return tot ? 100*hit/tot : 0;
+}
+
+// ---- construcción de gráficos --------------------------------------------
+function mk(id, cfg){
   const el = document.getElementById(id);
-  if(!el) return null;
-  if(!hasCharts){
-    if(!el.dataset.noted){
-      const p=document.createElement('div'); p.className='note';
-      p.textContent=I18N[LANG].noChart; el.replaceWith(p);
-    }
-    return null;
+  if (!el) return null;
+  if (!hasCharts){
+    const p = document.createElement('div'); p.className='note';
+    p.textContent = I18N[LANG].noChart; el.replaceWith(p); return null;
   }
   return new Chart(el, cfg);
 }
+const ZOOM = {
+  zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' },
+  pan:{ enabled:true, mode:'x' }
+};
+function baseOpts(t, extra){
+  const o = { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, zoom: ZOOM },
+    scales:{ x:{grid:{color:gridc}}, y:{grid:{color:gridc},beginAtZero:true} } };
+  return Object.assign(o, extra||{});
+}
 
-function applyLang(lang){
-  LANG = lang;
-  const t = I18N[lang];
-  document.documentElement.lang = lang;
-  // Textos con data-i18n
-  document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const k = el.getAttribute('data-i18n');
-    if(t[k]) el.textContent = t[k];
-  });
-  // Sello
-  document.getElementById('stamp').textContent =
-    t.generated + ' ' + D.generated + ' · ' + D.snapshotDate +
-    ' · ' + t.source + ' ' + D.primarySource;
-  // Stats
+function rebuild(){
+  const t = I18N[LANG];
+  Object.values(charts).forEach(c => { if (c && c.destroy) c.destroy(); });
+  charts = {};
+
+  const snaps = snapsInRange();
+  const labels = snaps.map(s => s.d);
+  const aggs = snaps.map(agg);
+  const last = aggs.length ? aggs[aggs.length-1] : {total:0,byBase:{},byLabel:{},bip:{knots:0,core:0},distinct:0};
+  const lastSnap = snaps.length ? snaps[snaps.length-1] : {c:[],d:"—"};
+
+  // --- stats + BIP-110 (del último snapshot del rango) ---
+  const bipTot = last.bip.knots + last.bip.core;
+  document.getElementById('bipPct').textContent =
+    (last.total ? (100*bipTot/last.total) : 0).toFixed(2) + '%';
+  document.getElementById('bipKnots').textContent = fmt(last.bip.knots);
+  document.getElementById('bipCore').textContent = fmt(last.bip.core);
+  document.getElementById('bipTotal').textContent = fmt(last.total);
+
+  const distArr = Object.entries(last.byLabel).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const dominant = distArr.length ? distArr[0][0] : "—";
+  const knotsPct = last.total ? 100*last.byBase.knots/last.total : 0;
   const sr = document.getElementById('statRow'); sr.innerHTML='';
-  [[t.statNodes, fmt(D.networkTotal)],
-   [t.statDominant, D.dominant],
-   [t.statKnots, D.knotsPct.toFixed(1)+'%'],
-   [t.statVersions, D.distinctVersions]
+  [[t.statNodes, fmt(last.total)],
+   [t.statDominant, dominant],
+   [t.statKnots, knotsPct.toFixed(1)+'%'],
+   [t.statVersions, last.distinct]
   ].forEach(([l,n])=>{
     const d=document.createElement('div'); d.className='stat';
-    d.innerHTML=`<div class="n">${n}</div><div class="l">${l}</div>`;
+    d.innerHTML='<div class="n">'+n+'</div><div class="l">'+l+'</div>';
     sr.appendChild(d);
   });
   document.getElementById('distNote').textContent =
-    t.distNote.replace('{n}', D.distribution.length);
-  // Fuentes
-  const sw = document.getElementById('srcWrap');
-  if(Object.keys(D.sources).length>1){
-    const [c0,c1,c2]=t.srcCols;
-    let html=`<table><thead><tr><th>${c0}</th><th>${c1}</th>`+
-      `<th class="num">${c2}</th></tr></thead><tbody>`;
-    Object.entries(D.sources).forEach(([k,v])=>{ html+=`<tr><td>${k}</td>`+
-      `<td>${v.ts}</td><td class="num">${fmt(v.total)}</td></tr>`; });
-    sw.innerHTML=html+'</tbody></table>';
-  }else{
-    sw.innerHTML=`<p class="note">${t.srcOne}</p>`;
+    t.distNote.replace('{n}', distArr.length) + '  ·  ' + lastSnap.d;
+
+  // --- BIP-110 en el tiempo ---
+  charts.bip = mk('bipTs', { type:'line',
+    data:{ labels, datasets:[{ data: aggs.map(a=>a.bip.knots+a.bip.core),
+      borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.12)',
+      fill:true, tension:.25, pointRadius:2 }]},
+    options: baseOpts(t, { scales:{ x:{grid:{color:gridc}},
+      y:{grid:{color:gridc},beginAtZero:true,
+         title:{display:true,text:t.axisSignaling}} } }) });
+
+  // --- distribución del snapshot ---
+  charts.dist = mk('dist', { type:'bar',
+    data:{ labels: distArr.map(d=>d[0]),
+      datasets:[{ data: distArr.map(d=>d[1]),
+        backgroundColor: distArr.map(d=> d[0].startsWith('knots')?col('--knots')
+          : d[0].startsWith('core')?col('--core'):col('--other')),
+        borderRadius:3 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{display:false}}} } });
+
+  // --- comparación de versiones ---
+  const palette = [col('--core'),col('--knots'),col('--signal'),'#3fb950','#db6d28','#a371f7'];
+  const sel = [...state.versions];
+  if (sel.length){
+    charts.ver = mk('verChart', { type:'line',
+      data:{ labels, datasets: sel.map((lab,i)=>({
+        label: lab, borderColor: palette[i%palette.length],
+        data: snaps.map(s=>shareOfVersion(s,lab)),
+        tension:.25, pointRadius:2, borderWidth:2 })) },
+      options: baseOpts(t, { plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM},
+        scales:{ x:{grid:{color:gridc}},
+          y:{grid:{color:gridc},beginAtZero:true,
+             ticks:{callback:v=>v+'%'},
+             title:{display:true,text:t.axisShare}} } }) });
+  } else {
+    const el = document.getElementById('verChart');
+    if (el && el.getContext){ const ctx = el.getContext('2d');
+      ctx.clearRect(0,0,el.width,el.height); }
   }
-  // Pie
-  document.getElementById('foot').innerHTML =
-    t.foot.replace('{d}', D.generated);
-  // Botones activos
-  document.querySelectorAll('#langToggle button').forEach(b=>{
-    b.classList.toggle('active', b.dataset.lang===lang);
-  });
-  // Charts (recrear para actualizar etiquetas de ejes traducidas)
-  if(hasCharts) buildCharts(t);
+
+  // --- evolución por implementación ---
+  const dsEvo = [];
+  if (state.impls.has('core')) dsEvo.push({label:'Core',
+    data:aggs.map(a=>a.byBase.core), borderColor:col('--core'),tension:.25,pointRadius:2});
+  if (state.impls.has('knots')) dsEvo.push({label:'Knots',
+    data:aggs.map(a=>a.byBase.knots), borderColor:col('--knots'),tension:.25,pointRadius:2});
+  if (state.impls.has('bip110')) dsEvo.push({label:'BIP-110',
+    data:aggs.map(a=>a.byBase.bip110), borderColor:col('--signal'),tension:.25,pointRadius:2});
+  charts.evo = mk('evo', { type:'line', data:{labels, datasets:dsEvo},
+    options: baseOpts(t, {plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM}}) });
+
+  // --- cuota por implementación ---
+  const dsCk = [];
+  const pct = (k) => aggs.map(a => a.total ? 100*a.byBase[k]/a.total : 0);
+  if (state.impls.has('core')) dsCk.push({label:'Core %',data:pct('core'),
+    borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',fill:true,tension:.25,pointRadius:2});
+  if (state.impls.has('knots')) dsCk.push({label:'Knots %',data:pct('knots'),
+    borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',fill:true,tension:.25,pointRadius:2});
+  if (state.impls.has('bip110')) dsCk.push({label:'BIP-110 %',data:pct('bip110'),
+    borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',fill:true,tension:.25,pointRadius:2});
+  charts.ck = mk('ck', { type:'line', data:{labels,datasets:dsCk},
+    options: baseOpts(t, {plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,ticks:{callback:v=>v+'%'}}}}) });
+
+  // --- cola larga ---
+  const st = snaps.map(staleOf);
+  charts.stale = mk('stale', { type:'line',
+    data:{labels, datasets:[{ data: st.map(s=>s.stale),
+      borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.10)',
+      fill:true, tension:.25, pointRadius:2 }]},
+    options: baseOpts(t, { plugins:{legend:{display:false},zoom:ZOOM,
+      tooltip:{callbacks:{afterLabel:(c)=> '· '+st[c.dataIndex].pct.toFixed(1)+'% of Core'}}},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,title:{display:true,text:t.axisStale}}} }) });
+
+  // --- historia wayback (no depende de los filtros) ---
+  if (D.wayback.length){
+    charts.hist = mk('hist', { type:'line',
+      data:{ labels: D.wayback.map(p=>p.date),
+        datasets:[{ data: D.wayback.map(p=>p.total), borderColor:col('--ink'),
+          backgroundColor:'rgba(230,237,243,.06)', fill:true, tension:.2, pointRadius:2 }]},
+      options: baseOpts(t, {plugins:{legend:{display:false},zoom:ZOOM}}) });
+  }
 }
 
-document.querySelectorAll('#langToggle button').forEach(b=>{
-  b.addEventListener('click', ()=>applyLang(b.dataset.lang));
-});
+// ---- i18n + render estático ----------------------------------------------
+function applyLang(lang){
+  LANG = lang; const t = I18N[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k = el.getAttribute('data-i18n'); if (t[k]) el.textContent = t[k];
+  });
+  document.getElementById('stamp').textContent =
+    t.generated + ' ' + D.generated + ' · ' + t.source + ' ' + D.primarySource;
+  const sw = document.getElementById('srcWrap');
+  const [c0,c1,c2] = t.srcCols;
+  let html = '<table><thead><tr><th>'+c0+'</th><th>'+c1+'</th><th class="num">'+c2+'</th></tr></thead><tbody>';
+  Object.entries(D.sources).forEach(([k,v])=>{
+    html += '<tr><td>'+k+'</td><td>'+v.ts+'</td><td class="num">'+fmt(v.total)+'</td></tr>';
+  });
+  sw.innerHTML = html + '</tbody></table>';
+  document.getElementById('foot').textContent = t.foot.replace('{d}', D.generated);
+  document.querySelectorAll('#langToggle button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.lang===lang); });
+  rebuild();
+}
 
-// Idioma inicial: inglés por defecto; respeta ?lang=es o el navegador.
-// Idioma por defecto: SIEMPRE inglés. El español es opt-in vía el botón
-// o vía ?lang=es en la URL (útil para compartir el link ya en español).
-// No se autodetecta el idioma del navegador a propósito: el público
-// objetivo (dev de Bitcoin, grant) lee en inglés.
+// ---- controles ------------------------------------------------------------
+function initControls(){
+  // versiones disponibles (por label, ordenadas por presencia en el último snap)
+  const lastSnap = D.series.snaps[D.series.snaps.length-1];
+  const tally = {};
+  if (lastSnap) for (const [idx,n] of lastSnap.c){
+    const v = VK[idx]; tally[v.label] = (tally[v.label]||0)+n;
+  }
+  const opts = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,25);
+  const sel = document.getElementById('verSelect');
+  sel.size = 4;   // lista visible: multi-selección con ctrl/cmd+clic
+  opts.forEach(([lab])=>{
+    const o = document.createElement('option'); o.value=lab; o.textContent=lab;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', ()=>{
+    state.versions = new Set([...sel.selectedOptions].map(o=>o.value));
+    rebuild();
+  });
+  document.querySelectorAll('.chip.range').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip.range').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      state.days = parseInt(b.dataset.days)||0;
+      rebuild();
+    });
+  });
+  document.querySelectorAll('.chip.impl').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const k = b.dataset.impl;
+      if (state.impls.has(k) && state.impls.size > 1){ state.impls.delete(k); b.classList.remove('on'); }
+      else { state.impls.add(k); b.classList.add('on'); }
+      rebuild();
+    });
+  });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    state.days = 0; state.impls = new Set(["core","knots","bip110","other"]);
+    state.versions = new Set();
+    document.querySelectorAll('.chip.range').forEach(x=>x.classList.toggle('on', x.dataset.days==="0"));
+    document.querySelectorAll('.chip.impl').forEach(x=>x.classList.add('on'));
+    [...sel.options].forEach(o=>o.selected=false);
+    Object.values(charts).forEach(c=>{ if(c&&c.resetZoom) try{c.resetZoom();}catch(e){} });
+    rebuild();
+  });
+  document.querySelectorAll('#langToggle button').forEach(b=>{
+    b.addEventListener('click', ()=>applyLang(b.dataset.lang)); });
+  // doble clic en un gráfico -> reset zoom
+  document.querySelectorAll('canvas').forEach(cv=>{
+    cv.addEventListener('dblclick', ()=>{
+      Object.values(charts).forEach(c=>{ if(c&&c.resetZoom) try{c.resetZoom();}catch(e){} });
+    });
+  });
+}
+
+initControls();
 const urlLang = new URLSearchParams(location.search).get('lang');
 applyLang(urlLang && I18N[urlLang] ? urlLang : 'en');
-if(!hasCharts) buildCharts(I18N[LANG]);  // dispara los avisos de "no chart"
 </script>
 </body>
 </html>"""
@@ -737,66 +718,33 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[1])
     ap.add_argument("--telemetry", default="telemetry.db")
     ap.add_argument("--wayback", default="wayback.db")
-    ap.add_argument("--out", default="../docs/dashboard.html")
+    ap.add_argument("--out", default="../docs/index.html")
     args = ap.parse_args()
 
     con = con_ro(args.telemetry)
-
-    # Elegir la fuente primaria: preferir 'bitnodes-csv' (dataset CSV
-    # completo, ~46k nodos, serie desde mayo) si tiene datos; si no, caer
-    # a 'bitnodes' (scraping HTML viejo). Así el dashboard usa la mejor
-    # fuente disponible sin hardcodear.
-    def _has(src):
-        r = con.execute("SELECT COUNT(*) FROM snapshots WHERE source=?",
-                        (src,)).fetchone()
-        return r and r[0] > 0
-    PRIMARY = "bitnodes-csv" if _has("bitnodes-csv") else "bitnodes"
-    SRC_LABEL = "bitnod.es (CSV dataset)" if PRIMARY == "bitnodes-csv" \
-        else "bitnod.es"
-
-    ts, rows = latest_snapshot(con, PRIMARY)
-    dist, total = current_distribution(rows)
-    split = impl_split(rows)
-    knots_bip, core_bip = bip110_count(rows)
-    ranked_all, _ = current_distribution(rows, top=1)
-
-    # versión dominante (con etiqueta base+mm)
-    dominant = dist[0][0] if dist else "—"
-    distinct = len({(normalize_impl(i)[0], v) for i, v, _ in rows})
+    source, label = pick_source(con)
+    series = full_series(con, source)
 
     data = {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
-        "snapshotDate": iso(ts),
-        "primarySource": SRC_LABEL,
-        "networkTotal": total,
-        "dominant": dominant,
-        "knotsPct": 100.0 * split.get("knots", 0) / total if total else 0,
-        "distinctVersions": distinct,
-        "distribution": dist,
-        "bip": {
-            "knots": knots_bip, "core": core_bip,
-            "networkTotal": total,
-            "pct": 100.0 * (knots_bip + core_bip) / total if total else 0,
-        },
-        "timeseries": timeseries(con, PRIMARY),
-        "implShare": impl_share_series(con, PRIMARY),
-        "stale": stale_series(con, PRIMARY),
-        "latestAdoption": latest_adoption_series(con, PRIMARY),
-        "sources": source_compare(con),
+        "primarySource": label,
+        "series": series,
+        "sources": source_totals(con),
         "wayback": wayback_series(args.wayback),
     }
 
-    html = build_html(data)
-    import os
+    html = TEMPLATE.replace("__PAYLOAD__", json.dumps(data, separators=(",", ":")))
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
         f.write(html)
+
+    n_snaps = len(series["snaps"])
+    n_vers = len(series["vk"])
+    size_kb = os.path.getsize(args.out) / 1024
     print(f"Dashboard generado: {args.out}")
-    print(f"  snapshot {data['snapshotDate']} · {total:,} nodos · "
-          f"BIP-110 {data['bip']['pct']:.2f}%")
-    print(f"  serie: {len(data['timeseries'])} puntos live, "
-          f"{len(data['wayback'])} históricos")
-    print("Abrilo en el navegador, o subilo a GitHub Pages (carpeta docs/).")
+    print(f"  fuente: {label} · {n_snaps} snapshots · {n_vers} versiones")
+    print(f"  histórico wayback: {len(data['wayback'])} puntos")
+    print(f"  tamaño: {size_kb:.0f} KB (datos embebidos, filtrado en el navegador)")
 
 
 if __name__ == "__main__":

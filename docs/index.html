@@ -1,76 +1,89 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Bitcoin Network Twin — Panel</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/hammer.js/2.0.8/hammer.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-zoom/2.0.1/chartjs-plugin-zoom.min.js"></script>
 <style>
   :root{
     --bg:#0d1117; --panel:#161b22; --line:#21262d; --ink:#e6edf3;
     --muted:#8b949e; --core:#4493f8; --knots:#bc8cff; --signal:#f0a020;
-    --signal-dim:#5a4213; --grid:#1c2128;
+    --other:#6e7681; --grid:#1c2128;
   }
   *{box-sizing:border-box}
-  body{
-    margin:0; background:var(--bg); color:var(--ink);
+  body{margin:0;background:var(--bg);color:var(--ink);
     font-family:ui-monospace,"SF Mono","Cascadia Code",Menlo,monospace;
-    line-height:1.5; -webkit-font-smoothing:antialiased;
-  }
-  .wrap{max-width:1080px; margin:0 auto; padding:32px 20px 80px}
-  header{border-bottom:1px solid var(--line); padding-bottom:20px; margin-bottom:8px}
-  h1{font-size:20px; font-weight:600; letter-spacing:-.01em; margin:0 0 4px}
-  .sub{color:var(--muted); font-size:13px}
-  .eyebrow{color:var(--signal); font-size:11px; letter-spacing:.14em;
-    text-transform:uppercase; margin-bottom:14px}
-  .stamp{color:var(--muted); font-size:11px; margin-top:6px}
-  section{padding:34px 0; border-bottom:1px solid var(--line)}
-  h2{font-size:12px; letter-spacing:.12em; text-transform:uppercase;
-    color:var(--muted); font-weight:600; margin:0 0 18px}
-  .stat-row{display:flex; flex-wrap:wrap; gap:28px; margin-bottom:8px}
-  .stat .n{font-size:30px; font-weight:600; letter-spacing:-.02em}
-  .stat .l{font-size:12px; color:var(--muted); margin-top:2px}
-  .chartbox{position:relative; height:300px; margin-top:8px}
+    line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+  header{border-bottom:1px solid var(--line);padding-bottom:20px}
+  h1{font-size:20px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px}
+  .eyebrow{color:var(--signal);font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;margin-bottom:14px}
+  .stamp{color:var(--muted);font-size:11px;margin-top:6px}
+  .topbar{display:flex;justify-content:space-between;align-items:center}
+  .langtoggle{display:flex;border:1px solid var(--line);border-radius:6px;
+    overflow:hidden}
+  .langtoggle button{background:transparent;color:var(--muted);border:0;
+    padding:4px 10px;font-family:inherit;font-size:11px;cursor:pointer}
+  .langtoggle button.active{background:var(--line);color:var(--ink)}
+  section{padding:34px 0;border-bottom:1px solid var(--line)}
+  h2{font-size:12px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--muted);font-weight:600;margin:0 0 18px}
+  .stat-row{display:flex;flex-wrap:wrap;gap:28px;margin-bottom:8px}
+  .stat .n{font-size:30px;font-weight:600;letter-spacing:-.02em}
+  .stat .l{font-size:12px;color:var(--muted);margin-top:2px}
+  .chartbox{position:relative;height:300px;margin-top:8px}
   .chartbox.tall{height:340px}
-  .note{color:var(--muted); font-size:12px; margin-top:14px; max-width:70ch}
-  /* Apartado BIP-110 destacado */
-  .signal-panel{
-    background:linear-gradient(180deg, #1a1408 0%, var(--panel) 100%);
-    border:1px solid var(--signal-dim); border-radius:10px; padding:26px 24px;
-    margin-top:4px;
-  }
-  .signal-panel .live{
-    display:inline-flex; align-items:center; gap:7px; font-size:11px;
-    letter-spacing:.1em; text-transform:uppercase; color:var(--signal);
-  }
-  .dot{width:8px; height:8px; border-radius:50%; background:var(--signal);
-    box-shadow:0 0 0 0 rgba(240,160,32,.6); animation:pulse 2s infinite}
-  @keyframes pulse{
-    0%{box-shadow:0 0 0 0 rgba(240,160,32,.5)}
+  .note{color:var(--muted);font-size:12px;margin-top:14px;max-width:70ch}
+  /* Barra de controles */
+  .controls{position:sticky;top:0;z-index:20;background:rgba(13,17,23,.94);
+    backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;margin:18px 0 4px;display:flex;flex-wrap:wrap;
+    gap:18px;align-items:center}
+  .cgroup{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .clabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--muted)}
+  .chip{background:transparent;border:1px solid var(--line);color:var(--muted);
+    border-radius:999px;padding:3px 11px;font-family:inherit;font-size:11px;
+    cursor:pointer;transition:all .12s}
+  .chip:hover{color:var(--ink);border-color:var(--muted)}
+  .chip.on{background:var(--line);color:var(--ink);border-color:var(--muted)}
+  .chip.core.on{border-color:var(--core);color:var(--core)}
+  .chip.knots.on{border-color:var(--knots);color:var(--knots)}
+  .chip.bip110.on{border-color:var(--signal);color:var(--signal)}
+  .reset{margin-left:auto;font-size:10px;color:var(--muted);cursor:pointer;
+    background:none;border:0;font-family:inherit;text-decoration:underline}
+  select{background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:6px;padding:4px 8px;font-family:inherit;font-size:11px;
+    max-width:260px}
+  /* Panel BIP-110 */
+  .signal-panel{background:linear-gradient(180deg,#1a1408 0%,var(--panel) 100%);
+    border:1px solid #5a4213;border-radius:10px;padding:26px 24px}
+  .signal-panel .live{display:inline-flex;align-items:center;gap:7px;
+    font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--signal)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--signal);
+    animation:pulse 2s infinite}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(240,160,32,.5)}
     70%{box-shadow:0 0 0 9px rgba(240,160,32,0)}
-    100%{box-shadow:0 0 0 0 rgba(240,160,32,0)}
-  }
+    100%{box-shadow:0 0 0 0 rgba(240,160,32,0)}}
   @media (prefers-reduced-motion:reduce){.dot{animation:none}}
-  .signal-big{font-size:52px; font-weight:700; letter-spacing:-.03em;
-    color:var(--signal); line-height:1; margin:14px 0 4px}
-  .signal-grid{display:flex; flex-wrap:wrap; gap:26px; margin-top:18px}
-  .signal-grid .n{font-size:20px; font-weight:600}
-  .signal-grid .l{font-size:11px; color:var(--muted)}
-  table{width:100%; border-collapse:collapse; font-size:13px; margin-top:6px}
-  th,td{text-align:left; padding:7px 10px; border-bottom:1px solid var(--grid)}
-  th{color:var(--muted); font-weight:500; font-size:11px;
-    letter-spacing:.06em; text-transform:uppercase}
-  td.num{text-align:right; font-variant-numeric:tabular-nums}
-  .foot{color:var(--muted); font-size:11px; margin-top:40px; max-width:80ch}
-  a{color:var(--core); text-decoration:none}
-  .topbar{display:flex; justify-content:space-between; align-items:center}
-  .langtoggle{display:flex; gap:2px; border:1px solid var(--line);
-    border-radius:6px; overflow:hidden}
-  .langtoggle button{background:transparent; color:var(--muted); border:0;
-    padding:4px 10px; font-family:inherit; font-size:11px; cursor:pointer;
-    letter-spacing:.05em}
-  .langtoggle button.active{background:var(--line); color:var(--ink)}
-  .langtoggle button:hover{color:var(--ink)}
+  .signal-big{font-size:52px;font-weight:700;letter-spacing:-.03em;
+    color:var(--signal);line-height:1;margin:14px 0 4px}
+  .signal-grid{display:flex;flex-wrap:wrap;gap:26px;margin-top:18px}
+  .signal-grid .n{font-size:20px;font-weight:600}
+  .signal-grid .l{font-size:11px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--grid)}
+  th{color:var(--muted);font-weight:500;font-size:11px;letter-spacing:.06em;
+    text-transform:uppercase}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  .foot{color:var(--muted);font-size:11px;margin-top:40px;max-width:80ch}
+  .hint{font-size:10px;color:var(--muted);margin-top:6px;font-style:italic}
 </style>
 </head>
 <body>
@@ -88,88 +101,96 @@
     <div class="stamp" id="stamp"></div>
   </header>
 
-  <!-- BIP-110: la firma de la página -->
+  <!-- Controles -->
+  <div class="controls" id="controls">
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlRange">Range</span>
+      <button class="chip range" data-days="7">7d</button>
+      <button class="chip range" data-days="30">30d</button>
+      <button class="chip range" data-days="90">90d</button>
+      <button class="chip range on" data-days="0" data-i18n="ctrlAll">All</button>
+    </div>
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlImpl">Implementation</span>
+      <button class="chip impl core on" data-impl="core">Core</button>
+      <button class="chip impl knots on" data-impl="knots">Knots</button>
+      <button class="chip impl bip110 on" data-impl="bip110">BIP-110</button>
+      <button class="chip impl other on" data-impl="other" data-i18n="ctrlOther">Other</button>
+    </div>
+    <div class="cgroup">
+      <span class="clabel" data-i18n="ctrlVersions">Compare versions</span>
+      <select id="verSelect" multiple size="4" title="Ctrl/Cmd + click for multiple"></select>
+    </div>
+    <button class="reset" id="resetBtn" data-i18n="ctrlReset">reset</button>
+  </div>
+  <div class="hint" data-i18n="hintZoom">Scroll to zoom on charts · drag to pan · double-click to reset zoom</div>
+
+  <!-- BIP-110 -->
   <section>
     <h2 data-i18n="bipHead">BIP-110 signaling · UASF</h2>
     <div class="signal-panel">
       <span class="live"><span class="dot"></span> <span data-i18n="bipWindow">Flag-day window · August 2026</span></span>
       <div class="signal-big" id="bipPct">—</div>
-      <div class="l" style="color:var(--muted);font-size:12px" data-i18n="bipCaption">
-        of the network signals BIP-110 (nodes with a UASF-BIP110 user agent)</div>
+      <div style="color:var(--muted);font-size:12px" data-i18n="bipCaption">
+        of observed nodes run BIP-110 signaling software</div>
       <div class="signal-grid">
         <div><div class="n" id="bipKnots">—</div><div class="l" data-i18n="viaKnots">via Bitcoin Knots</div></div>
         <div><div class="n" id="bipCore">—</div><div class="l" data-i18n="viaCore">via patched Core</div></div>
-        <div><div class="n" id="bipTotal">—</div><div class="l" data-i18n="totalMeasured">total nodes measured</div></div>
+        <div><div class="n" id="bipTotal">—</div><div class="l" data-i18n="totalMeasured">nodes in snapshot</div></div>
       </div>
-      <p class="note" data-i18n="bipNote">
-        Own measurement over reachable user agents. Counts only active
-        signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory
-        mentions and the historical UASF-SegWit-BIP148 from 2017. The time
-        series begins the day the parser started preserving the marker.
-      </p>
+      <p class="note" data-i18n="bipNote">Own measurement over observed user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. Node software signaling — not miner block signaling, which is a separate metric.</p>
     </div>
     <div class="chartbox" style="margin-top:24px"><canvas id="bipTs"></canvas></div>
   </section>
 
   <!-- Estado actual -->
   <section>
-    <h2 data-i18n="todayHead">The network today</h2>
+    <h2 data-i18n="todayHead">Snapshot</h2>
     <div class="stat-row" id="statRow"></div>
     <div class="chartbox tall"><canvas id="dist"></canvas></div>
     <p class="note" id="distNote"></p>
+  </section>
+
+  <!-- Comparación de versiones -->
+  <section id="verSection">
+    <h2 data-i18n="verHead">Version comparison over time</h2>
+    <div class="chartbox"><canvas id="verChart"></canvas></div>
+    <p class="note" data-i18n="verNote">Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.</p>
   </section>
 
   <!-- Evolución -->
   <section>
     <h2 data-i18n="evoHead">Network evolution</h2>
     <div class="chartbox"><canvas id="evo"></canvas></div>
-    <p class="note" data-i18n="evoNote">Reachable nodes by implementation, one point per day.
-      Short window for now: the series grows daily.</p>
+    <p class="note" data-i18n="evoNote">Observed nodes by implementation, one point per day.</p>
   </section>
 
   <!-- Core vs Knots -->
   <section>
-    <h2 data-i18n="ckHead">Core vs Knots · share over time</h2>
+    <h2 data-i18n="ckHead">Implementation share over time</h2>
     <div class="chartbox"><canvas id="ck"></canvas></div>
-    <p class="note" data-i18n="ckNote">Percentage of the reachable network running each
-      implementation. Knots' share is closely watched amid the BIP-110 debate.</p>
+    <p class="note" data-i18n="ckNote">Percentage of observed nodes running each implementation.</p>
   </section>
 
   <!-- Cola larga -->
   <section>
     <h2 data-i18n="staleHead">The long tail · outdated nodes</h2>
     <div class="chartbox"><canvas id="stale"></canvas></div>
-    <p class="note" data-i18n="staleNote">Core nodes running versions at least three major
-      releases behind the newest (or 0.x). Echoes the historical finding that a
-      large fraction never updates — even years after a critical fix.</p>
-  </section>
-
-  <!-- Adopción última versión -->
-  <section>
-    <h2 data-i18n="adoptHead">Newest-version adoption</h2>
-    <div class="chartbox"><canvas id="adopt"></canvas></div>
-    <p class="note" data-i18n="adoptNote">Share of Core nodes already on the newest deployable
-      (major.minor) version seen in the network — the adoption model made visible on live data.</p>
+    <p class="note" data-i18n="staleNote">Core nodes running releases at least three major versions behind the newest (or 0.x).</p>
   </section>
 
   <!-- Fuentes -->
   <section>
     <h2 data-i18n="srcHead">Discrepancy between sources</h2>
     <div id="srcWrap"></div>
-    <p class="note" data-i18n="srcNote">Different crawlers see the network differently
-      (coverage and methodology). Cross-checking sources, rather than trusting a
-      single one, is part of the project's goal — single-source dependency is
-      what left the ecosystem without data when bitnodes.io expired in May 2026.</p>
+    <p class="note" data-i18n="srcNote">Different crawlers see the network differently (coverage and methodology). Every node count is an observation, not a census.</p>
   </section>
 
   <!-- Historia -->
   <section>
     <h2 data-i18n="histHead">Recovered history · 2016–2019</h2>
     <div class="chartbox"><canvas id="hist"></canvas></div>
-    <p class="note" data-i18n="histNote">Reachable-network size reconstructed from Internet
-      Archive captures (bitnodes.21.co and earn.com eras), a dataset that had
-      been lost. Basis for the model's historical calibrations (e.g. adoption
-      of the CVE-2018-17144 fix).</p>
+    <p class="note" data-i18n="histNote">Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.</p>
   </section>
 
   <div class="foot" id="foot"></div>
@@ -178,275 +199,390 @@
 <script>
 const I18N = {
   en: {
-    title: "Telemetry & adoption panel",
-    subtitle: "Synthetic replica calibrated against the live network · open data",
-    bipHead: "BIP-110 signaling · UASF",
-    bipWindow: "Flag-day window · August 2026",
-    bipCaption: "of the network signals BIP-110 (nodes with a UASF-BIP110 user agent)",
-    viaKnots: "via Bitcoin Knots", viaCore: "via patched Core",
-    totalMeasured: "total nodes measured",
-    bipNote: "Own measurement over reachable user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. The time series begins the day the parser started preserving the marker.",
-    todayHead: "The network today",
-    statNodes: "reachable nodes", statDominant: "dominant version",
-    statKnots: "Knots", statVersions: "distinct versions",
-    distNote: "Top {n} deployable versions (major.minor). Core in blue, Knots in purple.",
-    evoHead: "Network evolution",
-    evoNote: "Reachable nodes by implementation, one point per day. Short window for now: the series grows daily.",
-    ckHead: "Core vs Knots · share over time",
-    ckNote: "Percentage of the reachable network running each implementation. Knots' share is closely watched amid the BIP-110 debate.",
-    staleHead: "The long tail · outdated nodes",
-    staleNote: "Core nodes running versions at least three major releases behind the newest (or 0.x). Echoes the historical finding that a large fraction never updates — even years after a critical fix.",
-    adoptHead: "Newest-version adoption",
-    adoptNote: "Share of Core nodes on the two newest deployable (major.minor) versions seen in the network — the adoption model made visible on live data.",
-    srcHead: "Discrepancy between sources",
-    srcNote: "Different crawlers see the network differently (coverage and methodology). Cross-checking sources, rather than trusting a single one, is part of the project's goal — single-source dependency is what left the ecosystem without data when bitnodes.io expired in May 2026.",
-    srcCols: ["source", "date", "nodes seen"],
-    srcOne: "Only one source has data so far. Run dsn_ingest.py ingest to populate the comparison.",
-    histHead: "Recovered history · 2016–2019",
-    histNote: "Reachable-network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had been lost. Basis for the model's historical calibrations (e.g. adoption of the CVE-2018-17144 fix).",
-    generated: "Generated", source: "source",
-    noChart: "(chart unavailable without the charts library)",
-    foot: "Data: bitnod.es and DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. This panel is a static snapshot generated on {d}; regenerate with build_dashboard.py. Open-source project (MIT).",
-    axisSignaling: "signaling nodes", axisStale: "outdated nodes"
+    title:"Telemetry & adoption panel",
+    subtitle:"Synthetic replica calibrated against the live network · open data",
+    ctrlRange:"Range", ctrlAll:"All", ctrlImpl:"Implementation",
+    ctrlOther:"Other", ctrlVersions:"Compare versions", ctrlReset:"reset",
+    hintZoom:"Scroll to zoom on charts · drag to pan · double-click to reset zoom",
+    bipHead:"BIP-110 signaling · UASF",
+    bipWindow:"Flag-day window · August 2026",
+    bipCaption:"of observed nodes run BIP-110 signaling software",
+    viaKnots:"via Bitcoin Knots", viaCore:"via patched Core",
+    totalMeasured:"nodes in snapshot",
+    bipNote:"Own measurement over observed user agents. Counts only active signaling (UASF-BIP110 / bip110-v*); excludes BIP110-Theory mentions and the historical UASF-SegWit-BIP148 from 2017. Node software signaling — not miner block signaling, which is a separate metric.",
+    todayHead:"Snapshot",
+    statNodes:"observed nodes", statDominant:"dominant version",
+    statKnots:"Knots", statVersions:"distinct versions",
+    distNote:"Top {n} deployable versions (major.minor) in the selected snapshot.",
+    verHead:"Version comparison over time",
+    verNote:"Select versions in the control bar above to plot their share over time. Useful for watching a new release propagate while older ones decay.",
+    verEmpty:"No versions selected — pick some in the control bar above.",
+    evoHead:"Network evolution",
+    evoNote:"Observed nodes by implementation, one point per day.",
+    ckHead:"Implementation share over time",
+    ckNote:"Percentage of observed nodes running each implementation.",
+    staleHead:"The long tail · outdated nodes",
+    staleNote:"Core nodes running releases at least three major versions behind the newest (or 0.x).",
+    srcHead:"Discrepancy between sources",
+    srcNote:"Different crawlers see the network differently (coverage and methodology). Every node count is an observation, not a census.",
+    srcCols:["source","date","nodes seen"],
+    histHead:"Recovered history · 2016–2019",
+    histNote:"Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.",
+    generated:"Generated", source:"source",
+    axisSignaling:"signaling nodes", axisStale:"outdated nodes",
+    axisShare:"share of observed nodes",
+    noChart:"(chart unavailable without the charts library)",
+    foot:"Data: bitnod.es public CSV datasets, DSN/KIT (via bitcoin-stats-archive, CC BY 4.0), and the Internet Archive. Static snapshot generated {d}; regenerate with build_dashboard.py. Open-source (MIT)."
   },
   es: {
-    title: "Panel de telemetría y adopción",
-    subtitle: "Réplica sintética calibrada contra la red real · datos abiertos",
-    bipHead: "Señalización BIP-110 · UASF",
-    bipWindow: "Ventana de flag day · agosto 2026",
-    bipCaption: "de la red señaliza BIP-110 (nodos con user agent UASF-BIP110)",
-    viaKnots: "vía Bitcoin Knots", viaCore: "vía Core parcheado",
-    totalMeasured: "nodos totales medidos",
-    bipNote: "Medición propia sobre user agents alcanzables. Cuenta sólo señalización activa (UASF-BIP110 / bip110-v*); excluye menciones BIP110-Theory y el histórico UASF-SegWit-BIP148 de 2017. La serie temporal arranca el día en que el parser comenzó a preservar la marca.",
-    todayHead: "La red hoy",
-    statNodes: "nodos alcanzables", statDominant: "versión dominante",
-    statKnots: "Knots", statVersions: "versiones distintas",
-    distNote: "Top {n} versiones desplegables (major.minor). Core en azul, Knots en violeta.",
-    evoHead: "Evolución de la red",
-    evoNote: "Nodos alcanzables por implementación, un punto por día. Ventana corta por ahora: la serie crece a diario.",
-    ckHead: "Core vs Knots · cuota en el tiempo",
-    ckNote: "Porcentaje de la red alcanzable que corre cada implementación. La cuota de Knots es muy observada en medio del debate BIP-110.",
-    staleHead: "La cola larga · nodos desactualizados",
-    staleNote: "Nodos Core en versiones al menos tres releases mayores por detrás de la más nueva (o 0.x). Refleja el hallazgo histórico de que una fracción grande nunca actualiza — incluso años después de un fix crítico.",
-    adoptHead: "Adopción de la última versión",
-    adoptNote: "Cuota de nodos Core en las dos versiones desplegables (major.minor) más nuevas vistas en la red — el modelo de adopción hecho visible sobre datos en vivo.",
-    srcHead: "Discrepancia entre fuentes",
-    srcNote: "Distintos crawlers ven la red de forma distinta (cobertura y metodología). Cruzar fuentes, en vez de confiar en una sola, es parte del objetivo del proyecto — la fuente única fue lo que dejó al ecosistema sin datos cuando bitnodes.io expiró en mayo 2026.",
-    srcCols: ["fuente", "fecha", "nodos vistos"],
-    srcOne: "Sólo una fuente con datos por ahora. Corré dsn_ingest.py ingest para poblar la comparación.",
-    histHead: "Historia rescatada · 2016–2019",
-    histNote: "Tamaño de la red alcanzable reconstruido desde capturas del Internet Archive (eras bitnodes.21.co y earn.com), un dataset que se había perdido. Base de las calibraciones históricas del modelo (p. ej. la adopción del fix del CVE-2018-17144).",
-    generated: "Generado", source: "fuente",
-    noChart: "(gráfico no disponible sin la librería de charts)",
-    foot: "Datos: bitnod.es y DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Este panel es una foto estática generada el {d}; regenerar con build_dashboard.py. Proyecto open-source (MIT).",
-    axisSignaling: "nodos señalizando", axisStale: "nodos desactualizados"
+    title:"Panel de telemetría y adopción",
+    subtitle:"Réplica sintética calibrada contra la red real · datos abiertos",
+    ctrlRange:"Rango", ctrlAll:"Todo", ctrlImpl:"Implementación",
+    ctrlOther:"Otros", ctrlVersions:"Comparar versiones", ctrlReset:"reiniciar",
+    hintZoom:"Rueda para zoom · arrastrar para desplazar · doble clic para reiniciar",
+    bipHead:"Señalización BIP-110 · UASF",
+    bipWindow:"Ventana de flag day · agosto 2026",
+    bipCaption:"de los nodos observados corre software que señaliza BIP-110",
+    viaKnots:"vía Bitcoin Knots", viaCore:"vía Core parcheado",
+    totalMeasured:"nodos en el snapshot",
+    bipNote:"Medición propia sobre user agents observados. Cuenta sólo señalización activa (UASF-BIP110 / bip110-v*); excluye menciones BIP110-Theory y el histórico UASF-SegWit-BIP148 de 2017. Señalización por software de nodos — no señalización de bloques por mineros, que es una métrica distinta.",
+    todayHead:"Snapshot",
+    statNodes:"nodos observados", statDominant:"versión dominante",
+    statKnots:"Knots", statVersions:"versiones distintas",
+    distNote:"Top {n} versiones desplegables (major.minor) en el snapshot seleccionado.",
+    verHead:"Comparación de versiones en el tiempo",
+    verNote:"Elegí versiones en la barra de control de arriba para graficar su cuota en el tiempo. Útil para ver propagarse un release nuevo mientras los viejos decaen.",
+    verEmpty:"Ninguna versión seleccionada — elegí algunas en la barra de arriba.",
+    evoHead:"Evolución de la red",
+    evoNote:"Nodos observados por implementación, un punto por día.",
+    ckHead:"Cuota por implementación en el tiempo",
+    ckNote:"Porcentaje de nodos observados que corre cada implementación.",
+    staleHead:"La cola larga · nodos desactualizados",
+    staleNote:"Nodos Core en releases al menos tres versiones mayores por detrás de la más nueva (o 0.x).",
+    srcHead:"Discrepancia entre fuentes",
+    srcNote:"Distintos crawlers ven la red de forma distinta (cobertura y metodología). Todo conteo de nodos es una observación, no un censo.",
+    srcCols:["fuente","fecha","nodos vistos"],
+    histHead:"Historia rescatada · 2016–2019",
+    histNote:"Tamaño observado de la red reconstruido desde capturas del Internet Archive (eras bitnodes.21.co y earn.com), un dataset que se había vuelto inaccesible.",
+    generated:"Generado", source:"fuente",
+    axisSignaling:"nodos señalizando", axisStale:"nodos desactualizados",
+    axisShare:"cuota de nodos observados",
+    noChart:"(gráfico no disponible sin la librería de charts)",
+    foot:"Datos: datasets CSV públicos de bitnod.es, DSN/KIT (vía bitcoin-stats-archive, CC BY 4.0), e Internet Archive. Foto estática generada el {d}; regenerar con build_dashboard.py. Open-source (MIT)."
   }
 };
+
+const D = {"generated":"2026-08-17 22:47 UTC","primarySource":"bitnod.es (CSV dataset)","series":{"vk":["core|0.11.2","core|0.12.0","core|0.12.1","core|0.13.0","core|0.13.1","core|0.14.1","core|0.14.2","core|0.15.0.1","core|0.15.1","core|0.15.2","core|0.15.99","core|0.16.0","core|0.16.2","core|0.16.3","core|0.16.99","core|0.17.0","core|0.17.0.1","core|0.17.1","core|0.17.2","core|0.18.0","core|0.18.1","core|0.18.99","core|0.19.0.1","core|0.19.1","core|0.20.0","core|0.20.1","core|0.20.2","core|0.21.0","core|0.21.1","core|0.21.2","core|0.8.3","core|0.8.6","core|1.0.0","core|22.0.0","core|22.1.0","core|22.99.0","core|23.0.0","core|23.1.0","core|23.99.0","core|24.0.0","core|24.0.1","core|24.1.0","core|24.2.0","core|24.99.0","core|25.0.0","core|25.1.0","core|25.2.0","core|25.99.0","core|26.0.0","core|26.1.0","core|26.2.0","core|26.99.0","core|27.0.0","core|27.1.0","core|27.2.0","core|27.99.0","core|27.99.21","core|28.0.0","core|28.1.0","core|28.2.0","core|28.3.0","core|28.4.0","core|28.99.0","core|29.0.0","core|29.1.0","core|29.2.0","core|29.3.0","core|29.99.0","core|30.0.0","core|30.1.0","core|30.2.0","core|30.99.0","core|31.0.0","core|31.99.0","core-bip110|29.3.0","knots|23.0.0","knots|26.1.0","knots|27.1.0","knots|28.1.0","knots|29.1.0","knots|29.2.0","knots|29.3.0","knots|30.2.0","knots-bip110|28.1.0","knots-bip110|29.2.0","knots-bip110|29.3.0","other|unknown","core|0.19.99","knots-bip110|29.1.0","core-bip110|31.0.0","core|0.13.2","core|0.8.5","core|0.9.1","core|21.0.0.21","core|23.2.0","core|0.8.99","core-bip110|77.0.0","knots|31.0.0","core|0.16.1","core|31.1.0","core|30.3.0","core|0.9.3","core|0.8.1","core|29.4.0","core|31.1.1","knots|29.4.0","knots-bip110|29.4.0","knots|31.1.0"],"snaps":[{"d":"2026-05-20","c":[[0,1],[1,1],[2,7],[3,2],[4,1],[5,2],[6,1],[7,1],[8,3],[9,1],[10,1],[11,1],[12,1],[13,3],[14,1],[15,4],[16,2],[17,7],[18,2],[19,21],[20,8],[21,1],[22,6],[23,4],[24,44],[25,23],[26,1],[27,37],[28,50],[29,3],[30,1],[31,1],[32,2],[33,242],[34,4],[35,2],[36,89],[37,8],[38,2],[39,14],[40,180],[41,15],[42,12],[43,5],[44,442],[45,527],[46,8],[47,10],[48,956],[49,44],[50,44],[51,6],[52,1422],[53,550],[54,129],[55,5],[56,1],[57,435],[58,1548],[59,37],[60,24],[61,13],[62,7],[63,965],[64,599],[65,925],[66,1394],[67,15],[68,850],[69,25],[70,1637],[71,20],[72,1367],[73,32],[74,2],[75,1],[76,1],[77,25],[78,333],[79,220],[80,555],[81,1643],[82,1],[83,1],[84,233],[85,1040],[86,44]]},{"d":"2026-05-21","c":[[0,1],[1,1],[2,8],[3,2],[4,1],[5,3],[6,1],[7,1],[8,3],[9,1],[10,1],[11,3],[12,2],[13,5],[14,1],[15,4],[16,4],[17,8],[18,3],[19,25],[20,11],[21,1],[22,8],[23,4],[87,1],[24,82],[25,26],[26,1],[27,41],[28,65],[29,4],[30,1],[31,1],[32,3],[33,328],[34,4],[35,2],[36,128],[37,10],[38,2],[39,18],[40,210],[41,19],[42,16],[43,8],[44,557],[45,796],[46,9],[47,18],[48,1170],[49,55],[50,51],[51,6],[52,1573],[53,706],[54,174],[55,15],[56,1],[57,540],[58,1904],[59,46],[60,34],[61,17],[62,10],[63,1229],[64,795],[65,1150],[66,1748],[67,18],[68,1095],[69,34],[70,2111],[71,28],[72,1854],[73,44],[74,2],[75,1],[76,1],[77,29],[78,415],[79,277],[80,651],[81,2069],[82,1],[83,1],[88,1],[84,282],[85,1262],[86,60]]},{"d":"2026-05-23","c":[[0,1],[1,1],[2,8],[3,2],[4,1],[5,4],[6,1],[7,1],[8,3],[9,1],[10,1],[11,3],[12,2],[13,5],[14,2],[15,5],[16,4],[17,9],[18,3],[19,25],[20,11],[21,1],[22,8],[23,4],[87,1],[24,83],[25,27],[26,2],[27,42],[28,68],[29,4],[30,1],[31,1],[32,3],[33,350],[34,4],[35,2],[36,144],[37,10],[38,2],[39,18],[40,225],[41,21],[42,17],[43,9],[44,600],[45,887],[46,9],[47,18],[48,1197],[49,56],[50,51],[51,6],[52,1605],[53,737],[54,181],[55,16],[56,2],[57,563],[58,2015],[59,47],[60,36],[61,21],[62,10],[63,1305],[64,858],[65,1221],[66,1820],[67,19],[68,1182],[69,36],[70,2270],[71,31],[72,2093],[73,44],[74,2],[89,1],[75,1],[76,1],[77,32],[78,431],[79,288],[80,685],[81,2232],[82,1],[83,1],[88,1],[84,292],[85,1303],[86,61]]},{"d":"2026-05-24","c":[[0,1],[1,1],[2,8],[3,2],[4,1],[90,1],[5,4],[6,1],[7,1],[8,3],[9,1],[10,1],[11,3],[12,2],[13,6],[14,2],[15,5],[16,4],[17,9],[18,3],[19,26],[20,11],[21,1],[22,8],[23,4],[87,1],[24,85],[25,27],[26,2],[27,42],[28,70],[29,4],[30,1],[31,2],[32,4],[33,364],[34,4],[35,2],[36,153],[37,10],[38,2],[39,19],[40,236],[41,21],[42,17],[43,10],[44,631],[45,903],[46,10],[47,19],[48,1213],[49,57],[50,50],[51,6],[52,1628],[53,759],[54,183],[55,16],[56,2],[57,576],[58,2080],[59,46],[60,36],[61,19],[62,10],[63,1337],[64,894],[65,1274],[66,1877],[67,19],[68,1244],[69,37],[70,2363],[71,33],[72,2351],[73,45],[74,2],[89,1],[75,1],[76,1],[77,32],[78,438],[79,294],[80,733],[81,2466],[82,1],[83,1],[88,1],[84,305],[85,1355],[86,64]]},{"d":"2026-05-25","c":[[0,1],[1,1],[2,8],[3,2],[4,1],[90,1],[5,4],[6,1],[7,1],[8,4],[9,1],[10,1],[11,3],[12,2],[13,6],[14,2],[15,5],[16,4],[17,9],[18,3],[19,27],[20,11],[21,1],[22,8],[23,5],[87,1],[24,86],[25,27],[26,2],[27,43],[28,73],[29,4],[30,1],[31,2],[32,4],[33,384],[34,4],[35,2],[36,158],[37,10],[38,2],[39,19],[40,240],[41,21],[42,17],[43,10],[44,671],[45,922],[46,10],[47,20],[48,1242],[49,59],[50,52],[51,6],[52,1662],[53,773],[54,186],[55,16],[56,2],[57,595],[58,2158],[59,48],[60,38],[61,20],[62,11],[63,1386],[64,940],[65,1313],[66,1952],[67,18],[68,1299],[69,39],[70,2400],[71,33],[72,2667],[73,49],[74,2],[89,1],[75,1],[76,1],[77,34],[78,454],[79,304],[80,770],[81,2678],[82,1],[83,1],[88,1],[84,309],[85,1369],[86,65]]},{"d":"2026-05-31","c":[[0,1],[1,1],[2,8],[3,2],[4,1],[90,1],[5,4],[6,1],[7,1],[8,5],[9,2],[10,1],[11,3],[12,2],[13,6],[14,2],[15,5],[16,4],[17,10],[18,3],[19,27],[20,12],[21,1],[22,8],[23,5],[87,1],[24,87],[25,28],[26,3],[27,43],[28,75],[29,4],[91,2],[31,2],[92,1],[32,4],[93,1],[33,412],[34,4],[35,2],[36,155],[37,10],[94,1],[38,2],[39,19],[40,244],[41,21],[42,17],[43,10],[44,705],[45,924],[46,10],[47,20],[48,1227],[49,59],[50,54],[51,5],[52,1694],[53,779],[54,188],[55,14],[56,2],[57,603],[58,2229],[59,49],[60,37],[61,19],[62,11],[63,1393],[64,937],[65,1297],[66,1994],[67,17],[68,1293],[69,39],[70,2290],[71,33],[72,3081],[73,49],[74,2],[89,1],[75,1],[76,1],[77,31],[78,447],[79,306],[80,752],[81,2836],[82,1],[83,1],[88,1],[84,300],[85,1288],[86,69]]},{"d":"2026-06-06","c":[[0,1],[1,2],[2,8],[3,2],[4,1],[90,1],[5,4],[6,1],[7,1],[8,5],[9,3],[10,1],[11,3],[12,2],[13,7],[14,2],[15,5],[16,4],[17,12],[18,5],[19,27],[20,13],[21,1],[22,8],[23,5],[87,1],[24,88],[25,29],[26,5],[27,45],[28,79],[29,5],[91,2],[31,2],[95,1],[92,2],[32,4],[93,1],[33,440],[34,5],[35,2],[36,165],[37,10],[94,1],[38,2],[39,19],[40,255],[41,21],[42,17],[43,10],[44,740],[45,944],[46,11],[47,19],[48,1259],[49,62],[50,55],[51,5],[52,1741],[53,806],[54,192],[55,16],[56,2],[57,621],[58,2413],[59,50],[60,44],[61,20],[62,13],[63,1443],[64,964],[65,1343],[66,2104],[67,17],[68,1318],[69,40],[70,2237],[71,34],[72,3753],[73,55],[74,1],[89,1],[96,2],[75,1],[76,2],[77,24],[78,461],[79,317],[80,780],[81,3246],[97,1],[83,1],[88,1],[84,299],[85,1297],[86,77]]},{"d":"2026-06-13","c":[[0,1],[1,2],[2,7],[3,2],[4,1],[90,2],[5,4],[6,1],[7,1],[8,5],[9,3],[10,1],[11,3],[12,2],[13,7],[14,2],[15,6],[16,5],[17,14],[18,6],[19,27],[20,15],[21,1],[22,8],[23,4],[87,1],[24,88],[25,32],[26,5],[27,45],[28,83],[29,5],[91,2],[31,3],[95,1],[92,2],[32,4],[93,1],[33,464],[34,5],[35,2],[36,171],[37,10],[94,1],[38,3],[39,22],[40,260],[41,21],[42,17],[43,10],[44,753],[45,958],[46,12],[47,19],[48,1275],[49,63],[50,56],[51,5],[52,1768],[53,822],[54,192],[55,16],[56,2],[57,631],[58,2554],[59,50],[60,46],[61,25],[62,16],[63,1503],[64,982],[65,1382],[66,2205],[67,18],[68,1344],[69,41],[70,2225],[71,37],[72,4328],[73,56],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,472],[79,320],[80,792],[81,3675],[97,1],[83,1],[88,1],[84,296],[85,1155],[86,80]]},{"d":"2026-06-20","c":[[0,1],[1,3],[2,8],[3,2],[4,1],[90,3],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[12,2],[13,7],[14,2],[15,7],[16,5],[17,15],[18,7],[19,30],[20,16],[21,1],[22,8],[23,5],[87,1],[24,88],[25,32],[26,5],[27,46],[28,89],[29,6],[91,3],[31,3],[95,1],[92,2],[32,4],[93,1],[33,483],[34,5],[35,2],[36,175],[37,10],[94,1],[38,3],[39,22],[40,271],[41,21],[42,19],[43,10],[44,761],[45,959],[46,11],[47,19],[48,1289],[49,65],[50,56],[51,5],[52,1793],[53,838],[54,194],[55,24],[56,2],[57,646],[58,2684],[59,50],[60,47],[61,30],[62,22],[63,1529],[64,998],[65,1393],[66,2289],[67,18],[68,1355],[69,38],[70,2221],[71,35],[72,4871],[73,62],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,479],[79,327],[80,799],[81,3967],[97,1],[83,1],[88,1],[84,304],[85,1069],[86,86]]},{"d":"2026-06-25","c":[[0,1],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,16],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,3],[95,1],[92,2],[32,4],[93,1],[33,499],[34,5],[35,2],[36,177],[37,10],[94,1],[38,3],[39,22],[40,272],[41,21],[42,19],[43,10],[44,773],[45,966],[46,11],[47,19],[48,1299],[49,65],[50,56],[51,5],[52,1816],[53,842],[54,196],[55,32],[56,2],[57,660],[58,2745],[59,51],[60,49],[61,31],[62,22],[63,1547],[64,995],[65,1405],[66,2322],[67,18],[68,1369],[69,35],[70,2268],[71,35],[72,5141],[99,3],[73,68],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,483],[79,328],[80,814],[81,4118],[97,1],[83,1],[88,1],[84,303],[85,1046],[86,88]]},{"d":"2026-06-27","c":[[0,1],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,4],[95,1],[92,2],[32,4],[93,1],[33,503],[34,5],[35,2],[36,177],[37,10],[94,1],[38,3],[39,22],[40,274],[41,20],[42,19],[43,10],[44,776],[45,965],[46,11],[47,19],[48,1299],[49,65],[50,55],[51,5],[52,1817],[53,845],[54,195],[55,32],[56,2],[57,666],[58,2760],[59,51],[60,49],[61,33],[62,22],[63,1555],[64,996],[65,1412],[66,2322],[67,13],[68,1374],[69,35],[70,2262],[100,2],[71,35],[72,5215],[99,8],[73,72],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,485],[79,328],[80,814],[81,4219],[97,1],[83,1],[88,1],[84,302],[85,1015],[86,90]]},{"d":"2026-06-28","c":[[0,2],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,506],[34,5],[35,2],[36,178],[37,10],[94,1],[38,3],[39,22],[40,276],[41,21],[42,19],[43,10],[44,779],[45,968],[46,11],[47,19],[48,1300],[49,66],[50,57],[51,5],[52,1826],[53,850],[54,195],[55,32],[56,2],[57,668],[58,2790],[59,51],[60,50],[61,34],[62,23],[63,1572],[64,999],[65,1423],[66,2336],[67,13],[68,1387],[69,35],[70,2273],[100,2],[71,35],[72,5402],[99,11],[73,73],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,485],[79,329],[80,812],[81,4309],[97,1],[83,1],[88,1],[84,300],[85,1005],[86,91]]},{"d":"2026-06-30","c":[[0,2],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,509],[34,5],[35,2],[36,180],[37,10],[94,1],[38,3],[39,22],[40,277],[41,21],[42,20],[43,10],[44,781],[45,970],[46,11],[47,19],[48,1302],[49,68],[50,56],[51,5],[52,1831],[53,850],[54,195],[55,33],[56,2],[57,674],[58,2809],[59,51],[60,52],[61,36],[62,24],[63,1577],[64,999],[65,1425],[66,2350],[67,13],[68,1393],[69,35],[70,2277],[100,2],[71,35],[72,5489],[99,13],[73,73],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,489],[79,329],[80,808],[81,4350],[97,1],[83,1],[88,1],[84,297],[85,1007],[86,91]]},{"d":"2026-07-02","c":[[0,2],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,513],[34,5],[35,2],[36,183],[37,10],[94,1],[38,3],[39,22],[40,278],[41,20],[42,20],[43,10],[44,784],[45,971],[46,11],[47,19],[48,1305],[49,68],[50,56],[51,5],[52,1842],[53,854],[54,195],[55,33],[56,2],[57,674],[58,2846],[59,52],[60,55],[61,37],[62,24],[63,1585],[64,1002],[65,1438],[66,2367],[67,13],[68,1393],[69,35],[70,2290],[100,2],[71,36],[72,5616],[99,14],[73,74],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,494],[79,336],[80,810],[81,4442],[97,1],[83,1],[88,1],[84,297],[85,993],[86,93]]},{"d":"2026-07-03","c":[[0,2],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,33],[26,6],[27,46],[28,90],[29,6],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,515],[34,5],[35,2],[36,184],[37,10],[94,1],[38,3],[39,22],[40,283],[41,21],[42,20],[43,10],[44,787],[45,972],[46,11],[47,19],[48,1304],[49,69],[50,57],[51,5],[52,1846],[53,858],[54,195],[55,34],[56,2],[57,674],[58,2861],[59,52],[60,56],[61,38],[62,25],[63,1586],[64,1003],[65,1447],[66,2376],[67,13],[68,1392],[69,35],[70,2294],[100,3],[71,37],[72,5703],[99,15],[73,76],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,495],[79,336],[80,808],[81,4488],[97,1],[83,1],[88,1],[84,297],[85,983],[86,95]]},{"d":"2026-07-04","c":[[0,2],[1,3],[2,9],[3,4],[4,1],[90,3],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,6],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,34],[26,6],[27,46],[28,91],[29,7],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,516],[34,5],[35,2],[36,187],[37,10],[94,1],[38,3],[39,22],[40,282],[41,20],[42,20],[43,10],[44,790],[45,978],[46,11],[47,19],[48,1303],[49,69],[50,57],[51,5],[52,1853],[53,861],[54,195],[55,34],[56,2],[57,675],[58,2870],[59,52],[60,56],[61,38],[62,25],[63,1591],[64,1002],[65,1449],[66,2384],[67,13],[68,1392],[69,35],[70,2288],[100,3],[71,37],[72,5801],[99,16],[73,77],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,494],[79,335],[80,814],[81,4524],[97,1],[83,1],[88,1],[84,296],[85,984],[86,96]]},{"d":"2026-07-05","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,35],[26,6],[27,46],[28,92],[29,9],[102,1],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,519],[34,5],[35,2],[36,188],[37,10],[94,1],[38,3],[39,22],[40,282],[41,21],[42,20],[43,10],[44,791],[45,981],[46,11],[47,19],[48,1304],[49,69],[50,56],[51,5],[52,1853],[53,865],[54,195],[55,34],[56,2],[57,678],[58,2892],[59,52],[60,56],[61,38],[62,26],[63,1588],[64,1004],[65,1446],[66,2392],[67,13],[68,1396],[69,36],[70,2307],[100,3],[71,37],[72,5873],[99,15],[73,79],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,500],[79,336],[80,815],[81,4557],[97,1],[83,1],[88,1],[84,297],[85,983],[86,98]]},{"d":"2026-07-07","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,35],[26,6],[27,46],[28,93],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,524],[34,5],[35,2],[36,188],[37,10],[94,1],[38,3],[39,22],[40,285],[41,20],[42,20],[43,10],[44,797],[45,981],[46,13],[47,19],[48,1306],[49,70],[50,55],[51,5],[52,1863],[53,866],[54,195],[55,34],[56,2],[57,682],[58,2925],[59,52],[60,56],[61,38],[62,27],[63,1600],[64,1012],[65,1458],[66,2409],[67,13],[68,1395],[69,36],[70,2312],[100,3],[71,37],[72,6043],[99,17],[73,81],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,505],[79,335],[80,819],[81,4623],[97,1],[83,1],[88,1],[84,299],[85,974],[86,102]]},{"d":"2026-07-08","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,88],[25,35],[26,6],[27,46],[28,93],[29,9],[102,1],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,529],[34,5],[35,2],[36,190],[37,10],[94,1],[38,3],[39,22],[40,285],[41,21],[42,20],[43,10],[44,799],[45,980],[46,13],[47,19],[48,1302],[49,70],[50,57],[51,5],[52,1865],[53,867],[54,195],[55,34],[56,2],[57,684],[58,2938],[59,52],[60,56],[61,39],[62,27],[63,1608],[64,1016],[65,1461],[66,2419],[67,13],[68,1398],[69,37],[70,2318],[100,3],[71,36],[72,6106],[99,24],[73,82],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,507],[79,336],[80,821],[81,4655],[97,1],[83,1],[88,1],[84,301],[85,972],[86,102]]},{"d":"2026-07-09","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,89],[25,35],[26,6],[27,47],[28,96],[29,9],[102,1],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,534],[34,5],[35,2],[36,190],[37,10],[94,1],[38,3],[39,22],[40,287],[41,21],[42,20],[43,10],[44,804],[45,973],[46,14],[47,20],[48,1305],[49,71],[50,56],[51,5],[52,1876],[53,872],[54,196],[55,34],[56,2],[57,686],[58,2969],[59,52],[60,56],[61,41],[62,27],[63,1615],[64,1014],[65,1460],[66,2433],[67,13],[68,1397],[69,37],[70,2337],[100,3],[71,36],[72,6163],[99,128],[73,84],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,509],[79,337],[80,832],[81,4723],[97,1],[83,1],[88,1],[84,298],[85,968],[86,103]]},{"d":"2026-07-11","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,89],[25,36],[26,6],[27,47],[28,96],[29,9],[102,1],[91,5],[31,3],[95,1],[92,2],[101,1],[32,4],[93,1],[33,536],[34,5],[35,2],[36,190],[37,10],[94,1],[38,3],[39,22],[40,289],[41,21],[42,20],[43,10],[44,806],[45,977],[46,15],[47,20],[48,1305],[49,71],[50,57],[51,5],[52,1878],[53,878],[54,197],[55,35],[56,2],[57,683],[58,2982],[59,52],[60,56],[61,41],[62,27],[63,1624],[64,1018],[65,1473],[66,2435],[103,2],[67,13],[68,1401],[69,37],[70,2345],[100,3],[71,36],[72,6185],[99,173],[73,87],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,512],[79,337],[80,834],[81,4756],[97,1],[83,1],[88,1],[84,297],[85,966],[86,103]]},{"d":"2026-07-12","c":[[0,2],[1,3],[2,10],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,30],[20,17],[21,1],[22,8],[23,5],[87,1],[24,89],[25,36],[26,6],[27,47],[28,96],[29,9],[102,1],[91,5],[31,5],[95,1],[92,2],[101,1],[32,4],[93,1],[33,536],[34,5],[35,2],[36,190],[37,10],[94,1],[38,3],[39,22],[40,291],[41,20],[42,20],[43,10],[44,808],[45,980],[46,14],[47,21],[48,1306],[49,71],[50,56],[51,5],[52,1881],[53,885],[54,197],[55,35],[56,2],[57,690],[58,3001],[59,53],[60,57],[61,41],[62,28],[63,1626],[64,1020],[65,1472],[66,2438],[103,4],[67,13],[68,1403],[69,37],[70,2356],[100,5],[71,36],[72,6214],[99,219],[73,88],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,511],[79,336],[80,836],[81,4793],[97,1],[83,1],[88,1],[84,296],[85,964],[86,100]]},{"d":"2026-07-14","c":[[0,2],[1,3],[2,11],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,7],[17,15],[18,7],[19,31],[20,17],[21,1],[22,8],[23,5],[87,1],[24,89],[25,37],[26,6],[27,47],[28,98],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,538],[34,5],[35,2],[36,191],[37,10],[94,1],[38,3],[39,22],[40,292],[41,21],[42,20],[43,11],[44,811],[45,982],[46,14],[47,22],[48,1308],[49,71],[50,56],[51,5],[52,1890],[53,889],[54,197],[55,36],[56,2],[57,693],[58,3002],[59,52],[60,58],[61,42],[62,29],[63,1640],[64,1019],[65,1482],[66,2452],[103,25],[67,13],[68,1416],[69,37],[70,2349],[100,8],[71,31],[72,6296],[99,303],[104,1],[73,98],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,510],[79,337],[80,837],[81,4861],[97,1],[83,1],[88,1],[84,294],[85,965],[86,104]]},{"d":"2026-07-16","c":[[0,2],[1,3],[2,11],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,7],[19,31],[20,18],[21,1],[22,8],[23,5],[87,1],[24,89],[25,37],[26,6],[27,47],[28,98],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,542],[34,5],[35,2],[36,192],[37,11],[94,1],[38,3],[39,22],[40,292],[41,21],[42,19],[43,11],[44,812],[45,985],[46,14],[47,23],[48,1309],[49,71],[50,57],[51,5],[52,1897],[53,895],[54,199],[55,36],[56,2],[57,694],[58,3023],[59,53],[60,60],[61,44],[62,29],[63,1648],[64,1017],[65,1483],[66,2466],[103,27],[67,13],[68,1418],[69,37],[70,2349],[100,11],[71,31],[72,6418],[99,378],[104,1],[73,98],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,514],[79,337],[80,837],[81,4952],[97,1],[83,1],[88,1],[84,296],[85,958],[86,105]]},{"d":"2026-07-17","c":[[0,2],[1,3],[2,11],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,8],[19,31],[20,18],[21,1],[22,8],[23,5],[87,1],[24,89],[25,37],[26,6],[27,47],[28,98],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,543],[34,5],[35,2],[36,193],[37,11],[94,1],[38,3],[39,22],[40,292],[41,21],[42,19],[43,11],[44,811],[45,986],[46,14],[47,23],[48,1310],[49,71],[50,57],[51,5],[52,1904],[53,895],[54,199],[55,36],[56,2],[57,694],[58,3041],[59,53],[60,60],[61,44],[62,29],[63,1647],[64,1018],[65,1480],[66,2466],[103,30],[67,13],[68,1418],[69,37],[70,2353],[100,10],[71,32],[72,6477],[99,418],[104,1],[73,100],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,515],[79,339],[80,834],[81,5014],[97,1],[83,1],[88,1],[84,295],[85,956],[86,107]]},{"d":"2026-07-18","c":[[0,2],[1,3],[2,11],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,9],[19,31],[20,18],[21,1],[22,8],[23,6],[87,1],[24,89],[25,37],[26,6],[27,47],[28,100],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,548],[34,5],[35,2],[36,195],[37,11],[94,1],[38,3],[39,22],[40,295],[41,21],[42,18],[43,11],[44,816],[45,991],[46,15],[47,24],[48,1316],[49,71],[50,59],[51,5],[52,1907],[53,899],[54,199],[55,37],[56,2],[57,694],[58,3074],[59,53],[60,60],[61,47],[62,29],[63,1656],[64,1019],[65,1482],[66,2477],[103,34],[67,13],[68,1418],[69,37],[70,2355],[100,8],[71,32],[72,6584],[99,518],[104,1],[73,100],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,515],[79,338],[80,834],[81,5100],[97,1],[83,1],[88,1],[84,292],[85,953],[86,110]]},{"d":"2026-07-20","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,9],[19,31],[20,18],[21,1],[22,8],[23,6],[87,1],[24,89],[25,37],[26,6],[27,47],[28,100],[29,9],[102,1],[91,5],[31,4],[95,1],[92,2],[101,1],[32,4],[93,1],[33,550],[34,5],[35,2],[36,194],[37,11],[94,1],[38,3],[39,22],[40,294],[41,21],[42,18],[43,11],[44,816],[45,990],[46,15],[47,24],[48,1317],[49,73],[50,60],[51,5],[52,1912],[53,898],[54,199],[55,37],[56,2],[57,701],[58,3095],[59,53],[60,60],[61,47],[62,30],[63,1657],[64,1019],[65,1485],[66,2485],[103,35],[67,13],[68,1423],[69,37],[70,2353],[100,9],[71,32],[72,6641],[99,569],[104,1],[73,102],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,518],[79,336],[80,833],[81,5144],[97,1],[83,1],[88,1],[84,288],[85,949],[86,111]]},{"d":"2026-07-21","c":[[0,2],[1,4],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,9],[19,32],[20,18],[21,1],[22,8],[23,6],[87,1],[24,89],[25,38],[26,6],[27,47],[28,100],[29,9],[102,1],[91,5],[31,5],[95,1],[92,2],[101,1],[32,4],[93,1],[33,553],[34,5],[35,2],[36,197],[37,11],[94,1],[38,3],[39,22],[40,294],[41,21],[42,18],[43,11],[44,818],[45,992],[46,15],[47,24],[48,1318],[49,73],[50,61],[51,5],[52,1914],[53,899],[54,199],[55,37],[56,2],[57,703],[58,3108],[59,53],[60,61],[61,50],[62,30],[63,1660],[64,1023],[65,1487],[66,2488],[103,36],[67,13],[68,1430],[69,37],[70,2357],[100,9],[71,32],[72,6681],[99,611],[104,1],[73,101],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,517],[79,336],[80,836],[81,5172],[97,1],[83,1],[88,1],[84,289],[85,948],[86,113]]},{"d":"2026-07-22","c":[[0,2],[1,4],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,4],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,15],[18,9],[19,32],[20,18],[21,1],[22,8],[23,6],[87,1],[24,89],[25,39],[26,6],[27,47],[28,100],[29,9],[102,1],[91,5],[31,5],[95,1],[92,2],[101,1],[32,4],[93,1],[33,556],[34,5],[35,2],[36,198],[37,11],[94,1],[38,3],[39,22],[40,295],[41,21],[42,18],[43,11],[44,818],[45,994],[46,15],[47,24],[48,1317],[49,73],[50,62],[51,5],[52,1918],[53,902],[54,199],[55,38],[56,2],[57,703],[58,3132],[59,54],[60,61],[61,52],[62,30],[63,1666],[64,1027],[65,1485],[66,2490],[103,38],[67,13],[68,1432],[69,37],[70,2351],[100,13],[71,32],[72,6724],[99,667],[104,1],[73,101],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,517],[79,337],[80,837],[81,5199],[97,1],[83,1],[88,1],[84,291],[85,952],[86,113]]},{"d":"2026-07-23","c":[[0,2],[1,4],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,16],[18,10],[19,32],[20,18],[21,1],[22,8],[23,6],[87,1],[24,89],[25,39],[26,7],[27,47],[28,101],[29,9],[102,1],[91,6],[31,5],[95,1],[92,2],[101,1],[32,4],[93,1],[33,562],[34,5],[35,2],[36,200],[37,11],[94,1],[38,3],[39,22],[40,294],[41,22],[42,19],[43,11],[44,824],[45,999],[46,15],[47,24],[48,1321],[49,74],[50,61],[51,5],[52,1927],[53,908],[54,199],[55,38],[56,2],[57,709],[58,3179],[59,54],[60,62],[61,52],[62,32],[63,1674],[64,1029],[65,1487],[66,2501],[103,48],[67,13],[68,1442],[69,37],[70,2342],[100,16],[71,32],[72,6843],[99,761],[104,1],[73,102],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,522],[79,336],[80,838],[81,5303],[97,1],[83,1],[88,1],[84,287],[85,945],[86,113]]},{"d":"2026-07-24","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,8],[17,16],[18,11],[19,32],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,39],[26,7],[27,48],[28,101],[29,9],[102,1],[91,6],[31,5],[95,1],[92,2],[101,1],[32,4],[93,1],[33,567],[34,5],[35,2],[36,200],[37,11],[94,1],[38,3],[39,22],[40,296],[41,23],[42,19],[43,11],[44,825],[45,999],[46,15],[47,24],[48,1323],[49,74],[50,61],[51,5],[52,1930],[53,911],[54,199],[55,38],[56,2],[57,714],[58,3195],[59,55],[60,62],[61,53],[62,32],[63,1678],[64,1028],[65,1490],[66,2505],[103,50],[67,13],[68,1451],[69,37],[70,2338],[100,20],[71,32],[72,6895],[99,798],[104,1],[73,102],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,522],[79,336],[80,838],[81,5350],[97,1],[83,1],[88,1],[84,286],[85,945],[86,113]]},{"d":"2026-07-25","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,9],[17,16],[18,11],[19,32],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,39],[26,7],[27,48],[28,101],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,1],[32,4],[93,1],[33,569],[34,5],[35,2],[36,201],[37,11],[94,1],[38,3],[39,22],[40,297],[41,22],[42,19],[43,11],[44,827],[45,999],[46,15],[47,24],[48,1325],[49,75],[50,62],[51,5],[52,1933],[53,911],[54,199],[55,38],[56,2],[57,718],[58,3210],[59,55],[60,63],[61,54],[62,32],[63,1684],[64,1028],[65,1494],[66,2516],[103,52],[67,13],[68,1451],[69,37],[70,2342],[100,20],[71,32],[72,6950],[99,855],[104,1],[73,105],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,522],[79,337],[80,842],[81,5413],[97,1],[83,1],[88,1],[84,287],[85,940],[86,113]]},{"d":"2026-07-27","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,9],[17,16],[18,11],[19,32],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,39],[26,7],[27,48],[28,101],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,1],[32,4],[93,1],[33,573],[34,5],[35,2],[36,205],[37,11],[94,1],[38,3],[39,22],[40,298],[41,23],[42,18],[43,11],[44,829],[45,1001],[46,15],[47,24],[48,1325],[49,75],[50,62],[51,5],[52,1938],[53,915],[54,199],[55,38],[56,2],[57,719],[58,3224],[59,55],[60,63],[61,54],[62,32],[63,1689],[64,1027],[65,1498],[66,2528],[103,55],[67,13],[68,1456],[69,37],[70,2351],[100,21],[71,32],[72,7025],[99,896],[104,1],[73,108],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,521],[79,337],[80,839],[81,5503],[97,1],[83,1],[88,1],[84,285],[85,937],[86,113]]},{"d":"2026-07-28","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,4],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,9],[17,16],[18,11],[19,33],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,38],[26,7],[27,48],[28,101],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,1],[32,4],[93,1],[33,577],[34,5],[35,2],[36,205],[37,11],[94,1],[38,3],[39,22],[40,297],[41,24],[42,18],[43,11],[44,831],[45,1003],[46,15],[47,24],[48,1328],[49,75],[50,63],[51,5],[52,1945],[53,916],[54,200],[55,38],[56,2],[57,718],[58,3244],[59,55],[60,63],[61,54],[62,32],[63,1694],[64,1034],[65,1501],[66,2541],[103,54],[67,13],[68,1456],[69,37],[70,2355],[100,19],[71,32],[72,7093],[99,936],[104,1],[73,109],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,521],[79,334],[80,841],[81,5582],[97,1],[83,1],[88,1],[84,290],[85,942],[86,113]]},{"d":"2026-07-29","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,5],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,16],[18,12],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,38],[26,8],[27,48],[28,101],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,1],[32,4],[93,1],[33,583],[34,5],[35,2],[36,207],[37,11],[94,1],[38,3],[39,22],[40,298],[41,23],[42,18],[43,11],[44,837],[45,1004],[46,17],[47,24],[48,1334],[49,77],[50,63],[51,5],[52,1949],[53,919],[54,200],[55,38],[56,2],[57,721],[58,3281],[59,56],[60,63],[61,54],[62,32],[63,1707],[64,1037],[65,1500],[66,2557],[103,57],[67,13],[68,1469],[69,37],[70,2373],[100,21],[71,33],[72,7231],[99,1034],[104,1],[73,110],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,529],[79,337],[80,842],[81,5724],[97,1],[83,1],[88,1],[84,294],[85,940],[86,115]]},{"d":"2026-07-31","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,5],[5,4],[6,2],[7,1],[8,5],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,16],[18,12],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,38],[26,8],[27,48],[28,101],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,1],[32,4],[93,1],[33,585],[34,5],[35,2],[36,208],[37,11],[94,1],[38,3],[39,22],[40,298],[41,23],[42,18],[43,11],[44,839],[45,1005],[46,18],[47,24],[48,1336],[49,78],[50,64],[51,5],[52,1952],[53,922],[54,200],[55,39],[56,2],[57,720],[58,3302],[59,56],[60,63],[61,54],[62,33],[63,1713],[64,1041],[65,1500],[66,2562],[103,57],[67,13],[68,1476],[69,37],[70,2377],[100,22],[71,33],[72,7275],[99,1059],[104,1],[73,111],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,528],[79,338],[80,843],[81,5770],[97,1],[83,1],[88,1],[84,293],[85,939],[86,116]]},{"d":"2026-08-02","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,5],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,16],[18,13],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,40],[26,8],[27,48],[28,101],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,1],[32,4],[93,1],[33,588],[34,5],[35,2],[36,210],[37,12],[94,1],[38,3],[39,22],[40,299],[41,24],[42,18],[43,11],[44,843],[45,1006],[46,19],[47,24],[48,1338],[49,78],[50,64],[51,5],[52,1958],[53,926],[54,201],[55,39],[56,2],[57,725],[58,3341],[59,56],[60,64],[61,54],[62,34],[63,1719],[64,1038],[65,1510],[66,2575],[103,57],[67,13],[68,1486],[69,37],[70,2379],[100,26],[71,33],[72,7409],[99,1153],[104,1],[73,113],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,530],[79,340],[80,846],[81,5882],[97,1],[83,1],[88,1],[84,296],[85,934],[86,117]]},{"d":"2026-08-03","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,5],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,17],[18,13],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,40],[26,8],[27,48],[28,103],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,1],[32,4],[93,1],[33,592],[34,5],[35,2],[36,211],[37,12],[94,1],[38,3],[39,22],[40,299],[41,23],[42,18],[43,11],[44,841],[45,1009],[46,19],[47,24],[48,1344],[49,77],[50,64],[51,5],[52,1968],[53,931],[54,199],[55,39],[56,2],[57,727],[58,3356],[59,56],[60,65],[61,55],[62,34],[63,1725],[64,1033],[65,1512],[66,2615],[103,66],[67,13],[68,1488],[69,37],[70,2365],[100,31],[71,33],[72,7513],[99,1250],[104,1],[73,115],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,531],[79,340],[80,843],[81,6044],[105,1],[97,1],[83,1],[88,1],[84,295],[85,914],[86,117]]},{"d":"2026-08-04","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,18],[18,15],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,41],[26,9],[27,48],[28,104],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,1],[32,4],[93,1],[33,597],[34,4],[35,2],[36,211],[37,12],[94,1],[38,3],[39,22],[40,304],[41,24],[42,18],[43,11],[44,845],[45,1012],[46,20],[47,24],[48,1351],[49,78],[50,67],[51,6],[52,1994],[53,939],[54,198],[55,40],[56,2],[57,729],[58,3411],[59,57],[60,66],[61,57],[62,35],[63,1743],[64,1029],[65,1527],[66,2666],[103,72],[67,15],[68,1492],[69,37],[70,2376],[100,32],[71,33],[72,7672],[99,1396],[104,1],[73,117],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,532],[79,338],[80,846],[81,6285],[105,2],[97,1],[83,1],[84,295],[85,893],[86,119]]},{"d":"2026-08-06","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,19],[18,15],[19,34],[20,18],[21,1],[22,9],[23,6],[87,1],[24,89],[25,41],[26,9],[27,48],[28,106],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,2],[32,4],[93,1],[33,602],[34,4],[35,2],[36,215],[37,12],[94,1],[38,3],[39,22],[40,305],[41,24],[42,18],[43,11],[44,845],[45,1016],[46,20],[47,24],[48,1351],[49,78],[50,67],[51,6],[52,1998],[53,942],[54,198],[55,40],[56,2],[57,731],[58,3431],[59,58],[60,67],[61,57],[62,36],[63,1746],[64,1030],[65,1527],[66,2679],[103,79],[67,15],[68,1498],[69,37],[70,2385],[100,33],[71,33],[72,7743],[99,1448],[104,1],[73,117],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,530],[79,339],[80,838],[81,6343],[105,3],[97,1],[83,1],[84,295],[85,889],[86,119]]},{"d":"2026-08-07","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,21],[18,16],[19,34],[20,18],[21,1],[22,10],[23,6],[87,1],[24,92],[25,41],[26,9],[27,48],[28,109],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,2],[32,4],[93,1],[33,607],[34,4],[35,2],[36,218],[37,12],[94,1],[38,3],[39,22],[40,308],[41,24],[42,18],[43,11],[44,850],[45,1019],[46,20],[47,24],[48,1356],[49,78],[50,66],[51,6],[52,2015],[53,942],[54,199],[55,40],[56,2],[57,733],[58,3468],[59,58],[60,69],[61,57],[62,38],[63,1750],[64,1038],[65,1535],[66,2725],[103,81],[67,15],[68,1502],[69,37],[70,2405],[100,34],[71,30],[72,7900],[99,1599],[104,1],[73,124],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,537],[79,334],[80,843],[81,6502],[105,38],[97,1],[83,1],[84,282],[85,873],[106,2],[86,120]]},{"d":"2026-08-08","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,21],[18,16],[19,34],[20,18],[21,1],[22,10],[23,6],[87,1],[24,92],[25,41],[26,8],[27,48],[28,109],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,2],[32,4],[93,1],[33,607],[34,4],[35,2],[36,218],[37,12],[94,1],[38,3],[39,22],[40,308],[41,23],[42,18],[43,11],[44,850],[45,1019],[46,20],[47,24],[48,1356],[49,78],[50,67],[51,6],[52,2016],[53,943],[54,199],[55,40],[56,2],[57,733],[58,3470],[59,58],[60,69],[61,57],[62,38],[63,1750],[64,1038],[65,1535],[66,2728],[103,82],[67,15],[68,1502],[69,37],[70,2401],[100,35],[71,30],[72,7905],[99,1610],[104,1],[73,124],[74,1],[89,1],[96,2],[75,1],[76,2],[77,23],[78,535],[79,334],[80,844],[81,6503],[105,48],[97,1],[83,1],[84,282],[85,872],[106,2],[86,120]]},{"d":"2026-08-10","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,23],[18,17],[19,34],[20,18],[21,1],[22,10],[23,6],[87,1],[24,92],[25,41],[26,8],[27,48],[28,111],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,2],[32,4],[93,1],[33,613],[34,4],[35,2],[36,218],[37,11],[94,1],[38,3],[39,22],[40,311],[41,25],[42,19],[43,11],[44,855],[45,1027],[46,20],[47,24],[48,1356],[49,78],[50,68],[51,6],[52,2027],[53,946],[54,198],[55,40],[56,2],[57,740],[58,3511],[59,59],[60,69],[61,62],[62,38],[63,1752],[64,1040],[65,1534],[66,2756],[103,89],[67,15],[68,1510],[69,37],[70,2406],[100,37],[71,29],[72,8077],[99,1792],[104,1],[73,131],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,535],[79,339],[80,868],[81,6379],[105,208],[97,1],[83,1],[84,273],[85,839],[106,3],[86,120]]},{"d":"2026-08-11","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,6],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,23],[18,19],[19,34],[20,18],[21,1],[22,11],[23,6],[87,1],[24,91],[25,41],[26,8],[27,48],[28,113],[29,9],[102,1],[91,6],[31,6],[95,1],[92,2],[101,2],[32,4],[93,1],[33,617],[34,4],[35,2],[36,223],[37,11],[94,1],[38,3],[39,22],[40,311],[41,26],[42,19],[43,11],[44,857],[45,1030],[46,20],[47,25],[48,1358],[49,80],[50,68],[51,6],[52,2037],[53,949],[54,196],[55,40],[56,2],[57,746],[58,3536],[59,60],[60,71],[61,62],[62,38],[63,1761],[64,1041],[65,1545],[66,2805],[103,99],[67,16],[68,1516],[69,37],[70,2415],[100,42],[71,29],[72,8191],[99,1922],[104,1],[73,133],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,532],[79,338],[80,896],[81,6302],[105,264],[97,1],[83,1],[84,267],[85,808],[106,4],[86,120]]},{"d":"2026-08-13","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,7],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,28],[18,21],[19,34],[20,18],[21,1],[22,11],[23,6],[87,1],[24,91],[25,43],[26,8],[27,48],[28,114],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,2],[32,4],[93,1],[33,627],[34,4],[35,2],[36,228],[37,11],[94,1],[38,3],[39,22],[40,313],[41,25],[42,19],[43,11],[44,859],[45,1037],[46,20],[47,25],[48,1374],[49,81],[50,70],[51,6],[52,2071],[53,959],[54,196],[55,41],[56,2],[57,753],[58,3615],[59,60],[60,71],[61,70],[62,39],[63,1786],[64,1050],[65,1590],[66,2923],[103,129],[67,16],[68,1531],[69,37],[70,2412],[100,49],[71,29],[72,8552],[99,2299],[104,1],[73,135],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,540],[79,345],[80,933],[81,6222],[105,431],[97,1],[107,1],[83,1],[84,258],[85,776],[106,3],[86,120]]},{"d":"2026-08-14","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,7],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,28],[18,21],[19,34],[20,18],[21,1],[22,11],[23,6],[87,1],[24,91],[25,43],[26,8],[27,48],[28,117],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,2],[32,4],[93,1],[33,629],[34,4],[35,2],[36,229],[37,11],[94,1],[38,3],[39,22],[40,313],[41,25],[42,19],[43,11],[44,861],[45,1041],[46,20],[47,26],[48,1379],[49,81],[50,71],[51,6],[52,2085],[53,962],[54,196],[55,41],[56,2],[57,754],[58,3651],[59,61],[60,72],[61,70],[62,40],[63,1794],[64,1075],[65,1604],[66,2944],[103,140],[67,16],[68,1541],[69,36],[70,2430],[100,54],[71,29],[72,8684],[99,2445],[104,1],[73,136],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,541],[79,346],[80,952],[81,6196],[105,492],[97,1],[107,1],[83,1],[84,259],[85,771],[106,2],[86,120]]},{"d":"2026-08-15","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,7],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,10],[17,30],[18,22],[19,34],[20,18],[21,1],[22,11],[23,6],[87,1],[24,91],[25,43],[26,8],[27,48],[28,119],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,2],[32,4],[93,1],[33,634],[34,4],[35,2],[36,231],[37,11],[94,1],[38,3],[39,22],[40,313],[41,25],[42,19],[43,11],[44,864],[45,1042],[46,21],[47,26],[48,1382],[49,83],[50,70],[51,6],[52,2098],[53,963],[54,196],[55,41],[56,2],[57,757],[58,3689],[59,62],[60,70],[61,69],[62,40],[63,1808],[64,1089],[65,1620],[66,2962],[103,145],[67,16],[68,1541],[69,36],[70,2447],[100,57],[71,29],[72,8831],[99,2588],[104,1],[73,137],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,539],[79,341],[80,958],[81,6182],[105,525],[97,1],[107,1],[83,1],[84,259],[85,771],[106,2],[86,120]]},{"d":"2026-08-16","c":[[0,2],[1,3],[2,12],[3,4],[4,1],[90,7],[5,4],[6,2],[7,1],[8,6],[9,3],[10,1],[11,3],[98,1],[12,3],[13,7],[14,2],[15,7],[16,11],[17,31],[18,23],[19,34],[20,18],[21,1],[22,11],[23,6],[87,1],[24,91],[25,46],[26,8],[27,47],[28,119],[29,9],[102,1],[91,6],[31,7],[95,1],[92,2],[101,2],[32,4],[93,1],[33,635],[34,4],[35,2],[36,233],[37,11],[94,1],[38,3],[39,22],[40,316],[41,25],[42,19],[43,11],[44,869],[45,1044],[46,21],[47,26],[48,1383],[49,84],[50,70],[51,6],[52,2109],[53,967],[54,197],[55,41],[56,2],[57,760],[58,3720],[59,63],[60,70],[61,69],[62,40],[63,1821],[64,1095],[65,1627],[66,2994],[103,151],[67,16],[68,1547],[69,36],[70,2457],[100,62],[71,28],[72,8951],[99,2684],[104,1],[73,138],[74,1],[89,1],[96,2],[75,1],[76,2],[77,22],[78,540],[79,342],[80,963],[81,6173],[105,555],[97,1],[107,1],[83,1],[84,258],[85,761],[106,2],[86,122]]}]},"sources":{"bitnodes-csv":{"ts":"2026-08-16","total":46728},"bitnodes":{"ts":"2026-08-16","total":27352},"dsn":{"ts":"2026-07-26","total":224}},"wayback":[{"date":"2016-05-12","total":3650},{"date":"2016-08-24","total":3723},{"date":"2016-10-31","total":3671},{"date":"2016-11-02","total":3830},{"date":"2016-11-05","total":3864},{"date":"2016-11-08","total":3795},{"date":"2016-11-10","total":3902},{"date":"2016-11-11","total":3907},{"date":"2016-11-13","total":3920},{"date":"2016-11-14","total":3960},{"date":"2016-11-17","total":3931},{"date":"2016-11-20","total":3862},{"date":"2016-11-23","total":3935},{"date":"2016-11-25","total":3728},{"date":"2016-11-28","total":3834},{"date":"2016-11-29","total":3865},{"date":"2016-12-07","total":3866},{"date":"2016-12-13","total":3973},{"date":"2016-12-20","total":4054},{"date":"2016-12-24","total":4117},{"date":"2017-01-01","total":4215},{"date":"2017-01-04","total":4156},{"date":"2017-01-07","total":4199},{"date":"2017-01-12","total":4186},{"date":"2017-03-07","total":4216},{"date":"2017-05-15","total":5079},{"date":"2017-05-30","total":5503},{"date":"2017-09-08","total":5824},{"date":"2017-09-28","total":5606},{"date":"2017-11-14","total":6564},{"date":"2017-12-01","total":6953},{"date":"2018-06-18","total":8173},{"date":"2018-06-28","total":7882},{"date":"2018-10-04","total":7753},{"date":"2018-12-29","total":7667},{"date":"2019-05-23","total":7145},{"date":"2019-07-13","total":7614},{"date":"2019-08-20","total":7226},{"date":"2019-09-21","total":7174},{"date":"2019-10-19","total":7316},{"date":"2019-11-15","total":7462},{"date":"2019-11-20","total":7422},{"date":"2019-12-08","total":7233},{"date":"2019-12-20","total":7409}]};
 let LANG = "en";
-const D = {"generated": "2026-08-17 12:20 UTC", "snapshotDate": "2026-08-16", "primarySource": "bitnod.es (CSV dataset)", "networkTotal": 46728, "dominant": "core 31.0", "knotsPct": 20.59150830337271, "distinctVersions": 99, "distribution": [["core 31.0", 8952], ["knots 29.3", 6934], ["core 28.1", 3720], ["core 29.3", 2995], ["core 31.1", 2685], ["core 30.2", 2457], ["core 27.0", 2109], ["core 29.0", 1821], ["core 29.2", 1627], ["core 30.0", 1547], ["core 26.0", 1383], ["knots 29.2", 1221]], "bip": {"knots": 1022, "core": 4, "networkTotal": 46728, "pct": 2.1956856702619416}, "timeseries": [{"date": "2026-05-20", "total": 18953, "core": 14856, "knots": 4053, "bip110": 1276}, {"date": "2026-05-21", "total": 23912, "core": 18862, "knots": 4990, "bip110": 1548}, {"date": "2026-05-23", "total": 25408, "core": 20079, "knots": 5268, "bip110": 1600}, {"date": "2026-05-24", "total": 26598, "core": 20906, "knots": 5628, "bip110": 1665}, {"date": "2026-05-25", "total": 27800, "core": 21812, "knots": 5923, "bip110": 1683}, {"date": "2026-05-31", "total": 28353, "core": 22319, "knots": 5965, "bip110": 1593}, {"date": "2026-06-06", "total": 30167, "core": 23660, "knots": 6430, "bip110": 1602}, {"date": "2026-06-13", "total": 31595, "core": 24776, "knots": 6739, "bip110": 1457}, {"date": "2026-06-20", "total": 32813, "core": 25753, "knots": 6974, "bip110": 1379}, {"date": "2026-06-25", "total": 33534, "core": 26325, "knots": 7121, "bip110": 1355}, {"date": "2026-06-27", "total": 33735, "core": 26453, "knots": 7192, "bip110": 1323}, {"date": "2026-06-28", "total": 34140, "core": 26780, "knots": 7269, "bip110": 1311}, {"date": "2026-06-30", "total": 34349, "core": 26950, "knots": 7308, "bip110": 1310}, {"date": "2026-07-02", "total": 34699, "core": 27206, "knots": 7400, "bip110": 1296}, {"date": "2026-07-03", "total": 34891, "core": 27361, "knots": 7435, "bip110": 1286}, {"date": "2026-07-04", "total": 35076, "core": 27504, "knots": 7476, "bip110": 1286}, {"date": "2026-07-05", "total": 35265, "core": 27650, "knots": 7517, "bip110": 1286}, {"date": "2026-07-07", "total": 35631, "core": 27945, "knots": 7584, "bip110": 1279}, {"date": "2026-07-08", "total": 35797, "core": 28075, "knots": 7620, "bip110": 1279}, {"date": "2026-07-09", "total": 36140, "core": 28341, "knots": 7696, "bip110": 1272}, {"date": "2026-07-11", "total": 36320, "core": 28486, "knots": 7731, "bip110": 1269}, {"date": "2026-07-12", "total": 36497, "core": 28632, "knots": 7765, "bip110": 1266}, {"date": "2026-07-14", "total": 36845, "core": 28909, "knots": 7832, "bip110": 1265}, {"date": "2026-07-16", "total": 37217, "core": 29190, "knots": 7922, "bip110": 1260}, {"date": "2026-07-17", "total": 37412, "core": 29324, "knots": 7981, "bip110": 1257}, {"date": "2026-07-18", "total": 37805, "core": 29635, "knots": 8060, "bip110": 1251}, {"date": "2026-07-20", "total": 38006, "core": 29799, "knots": 8096, "bip110": 1243}, {"date": "2026-07-21", "total": 38181, "core": 29942, "knots": 8126, "bip110": 1243}, {"date": "2026-07-22", "total": 38370, "core": 30096, "knots": 8161, "bip110": 1249}, {"date": "2026-07-23", "total": 38820, "core": 30448, "knots": 8259, "bip110": 1238}, {"date": "2026-07-24", "total": 39018, "core": 30600, "knots": 8305, "bip110": 1237}, {"date": "2026-07-25", "total": 39259, "core": 30777, "knots": 8369, "bip110": 1233}, {"date": "2026-07-27", "total": 39534, "core": 30971, "knots": 8450, "bip110": 1228}, {"date": "2026-07-28", "total": 39801, "core": 31149, "knots": 8539, "bip110": 1238}, {"date": "2026-07-29", "total": 40343, "core": 31533, "knots": 8695, "bip110": 1240}, {"date": "2026-07-31", "total": 40525, "core": 31669, "knots": 8740, "bip110": 1238}, {"date": "2026-08-02", "total": 40991, "core": 32017, "knots": 8857, "bip110": 1236}, {"date": "2026-08-03", "total": 41425, "core": 32311, "knots": 8997, "bip110": 1215}, {"date": "2026-08-04", "total": 42192, "core": 32854, "knots": 9219, "bip110": 1193}, {"date": "2026-08-06", "total": 42451, "core": 33067, "knots": 9265, "bip110": 1189}, {"date": "2026-08-07", "total": 43125, "core": 33566, "knots": 9439, "bip110": 1162}, {"date": "2026-08-08", "total": 43155, "core": 33587, "knots": 9448, "bip110": 1161}, {"date": "2026-08-10", "total": 43687, "core": 34096, "knots": 9471, "bip110": 1120}, {"date": "2026-08-11", "total": 44070, "core": 34512, "knots": 9438, "bip110": 1084}, {"date": "2026-08-13", "total": 45350, "core": 35694, "knots": 9536, "bip110": 1042}, {"date": "2026-08-14", "total": 45867, "core": 36160, "knots": 9587, "bip110": 1037}, {"date": "2026-08-15", "total": 46337, "core": 36612, "knots": 9605, "bip110": 1037}, {"date": "2026-08-16", "total": 46728, "core": 36984, "knots": 9622, "bip110": 1026}], "implShare": [{"date": "2026-05-20", "core": 78.38, "knots": 21.38, "other": 0.23}, {"date": "2026-05-21", "core": 78.88, "knots": 20.87, "other": 0.25}, {"date": "2026-05-23", "core": 79.03, "knots": 20.73, "other": 0.24}, {"date": "2026-05-24", "core": 78.6, "knots": 21.16, "other": 0.24}, {"date": "2026-05-25", "core": 78.46, "knots": 21.31, "other": 0.23}, {"date": "2026-05-31", "core": 78.72, "knots": 21.04, "other": 0.24}, {"date": "2026-06-06", "core": 78.43, "knots": 21.31, "other": 0.26}, {"date": "2026-06-13", "core": 78.42, "knots": 21.33, "other": 0.25}, {"date": "2026-06-20", "core": 78.48, "knots": 21.25, "other": 0.26}, {"date": "2026-06-25", "core": 78.5, "knots": 21.24, "other": 0.26}, {"date": "2026-06-27", "core": 78.41, "knots": 21.32, "other": 0.27}, {"date": "2026-06-28", "core": 78.44, "knots": 21.29, "other": 0.27}, {"date": "2026-06-30", "core": 78.46, "knots": 21.28, "other": 0.26}, {"date": "2026-07-02", "core": 78.41, "knots": 21.33, "other": 0.27}, {"date": "2026-07-03", "core": 78.42, "knots": 21.31, "other": 0.27}, {"date": "2026-07-04", "core": 78.41, "knots": 21.31, "other": 0.27}, {"date": "2026-07-05", "core": 78.41, "knots": 21.32, "other": 0.28}, {"date": "2026-07-07", "core": 78.43, "knots": 21.28, "other": 0.29}, {"date": "2026-07-08", "core": 78.43, "knots": 21.29, "other": 0.28}, {"date": "2026-07-09", "core": 78.42, "knots": 21.29, "other": 0.29}, {"date": "2026-07-11", "core": 78.43, "knots": 21.29, "other": 0.28}, {"date": "2026-07-12", "core": 78.45, "knots": 21.28, "other": 0.27}, {"date": "2026-07-14", "core": 78.46, "knots": 21.26, "other": 0.28}, {"date": "2026-07-16", "core": 78.43, "knots": 21.29, "other": 0.28}, {"date": "2026-07-17", "core": 78.38, "knots": 21.33, "other": 0.29}, {"date": "2026-07-18", "core": 78.39, "knots": 21.32, "other": 0.29}, {"date": "2026-07-20", "core": 78.41, "knots": 21.3, "other": 0.29}, {"date": "2026-07-21", "core": 78.42, "knots": 21.28, "other": 0.3}, {"date": "2026-07-22", "core": 78.44, "knots": 21.27, "other": 0.29}, {"date": "2026-07-23", "core": 78.43, "knots": 21.28, "other": 0.29}, {"date": "2026-07-24", "core": 78.43, "knots": 21.29, "other": 0.29}, {"date": "2026-07-25", "core": 78.39, "knots": 21.32, "other": 0.29}, {"date": "2026-07-27", "core": 78.34, "knots": 21.37, "other": 0.29}, {"date": "2026-07-28", "core": 78.26, "knots": 21.45, "other": 0.28}, {"date": "2026-07-29", "core": 78.16, "knots": 21.55, "other": 0.29}, {"date": "2026-07-31", "core": 78.15, "knots": 21.57, "other": 0.29}, {"date": "2026-08-02", "core": 78.11, "knots": 21.61, "other": 0.29}, {"date": "2026-08-03", "core": 78.0, "knots": 21.72, "other": 0.28}, {"date": "2026-08-04", "core": 77.87, "knots": 21.85, "other": 0.28}, {"date": "2026-08-06", "core": 77.89, "knots": 21.83, "other": 0.28}, {"date": "2026-08-07", "core": 77.83, "knots": 21.89, "other": 0.28}, {"date": "2026-08-08", "core": 77.83, "knots": 21.89, "other": 0.28}, {"date": "2026-08-10", "core": 78.05, "knots": 21.68, "other": 0.27}, {"date": "2026-08-11", "core": 78.31, "knots": 21.42, "other": 0.27}, {"date": "2026-08-13", "core": 78.71, "knots": 21.03, "other": 0.26}, {"date": "2026-08-14", "core": 78.84, "knots": 20.9, "other": 0.26}, {"date": "2026-08-15", "core": 79.01, "knots": 20.73, "other": 0.26}, {"date": "2026-08-16", "core": 79.15, "knots": 20.59, "other": 0.26}], "stale": [{"date": "2026-05-20", "stale": 7025, "pct": 47.29}, {"date": "2026-05-21", "stale": 8754, "pct": 46.41}, {"date": "2026-05-23", "stale": 9197, "pct": 45.8}, {"date": "2026-05-24", "stale": 9429, "pct": 45.1}, {"date": "2026-05-25", "stale": 9713, "pct": 44.53}, {"date": "2026-05-31", "stale": 9893, "pct": 44.33}, {"date": "2026-06-06", "stale": 23658, "pct": 99.99}, {"date": "2026-06-13", "stale": 24774, "pct": 99.99}, {"date": "2026-06-20", "stale": 25751, "pct": 99.99}, {"date": "2026-06-25", "stale": 26323, "pct": 99.99}, {"date": "2026-06-27", "stale": 26451, "pct": 99.99}, {"date": "2026-06-28", "stale": 26778, "pct": 99.99}, {"date": "2026-06-30", "stale": 26948, "pct": 99.99}, {"date": "2026-07-02", "stale": 27204, "pct": 99.99}, {"date": "2026-07-03", "stale": 27359, "pct": 99.99}, {"date": "2026-07-04", "stale": 27502, "pct": 99.99}, {"date": "2026-07-05", "stale": 27648, "pct": 99.99}, {"date": "2026-07-07", "stale": 27943, "pct": 99.99}, {"date": "2026-07-08", "stale": 28073, "pct": 99.99}, {"date": "2026-07-09", "stale": 28339, "pct": 99.99}, {"date": "2026-07-11", "stale": 28484, "pct": 99.99}, {"date": "2026-07-12", "stale": 28630, "pct": 99.99}, {"date": "2026-07-14", "stale": 28907, "pct": 99.99}, {"date": "2026-07-16", "stale": 29188, "pct": 99.99}, {"date": "2026-07-17", "stale": 29322, "pct": 99.99}, {"date": "2026-07-18", "stale": 29633, "pct": 99.99}, {"date": "2026-07-20", "stale": 29797, "pct": 99.99}, {"date": "2026-07-21", "stale": 29940, "pct": 99.99}, {"date": "2026-07-22", "stale": 30094, "pct": 99.99}, {"date": "2026-07-23", "stale": 30446, "pct": 99.99}, {"date": "2026-07-24", "stale": 30598, "pct": 99.99}, {"date": "2026-07-25", "stale": 30775, "pct": 99.99}, {"date": "2026-07-27", "stale": 30969, "pct": 99.99}, {"date": "2026-07-28", "stale": 31147, "pct": 99.99}, {"date": "2026-07-29", "stale": 31531, "pct": 99.99}, {"date": "2026-07-31", "stale": 31667, "pct": 99.99}, {"date": "2026-08-02", "stale": 32015, "pct": 99.99}, {"date": "2026-08-03", "stale": 32309, "pct": 99.99}, {"date": "2026-08-04", "stale": 32852, "pct": 99.99}, {"date": "2026-08-06", "stale": 33065, "pct": 99.99}, {"date": "2026-08-07", "stale": 33564, "pct": 99.99}, {"date": "2026-08-08", "stale": 33585, "pct": 99.99}, {"date": "2026-08-10", "stale": 34094, "pct": 99.99}, {"date": "2026-08-11", "stale": 34510, "pct": 99.99}, {"date": "2026-08-13", "stale": 35692, "pct": 99.99}, {"date": "2026-08-14", "stale": 36158, "pct": 99.99}, {"date": "2026-08-15", "stale": 36610, "pct": 99.99}, {"date": "2026-08-16", "stale": 36982, "pct": 99.99}], "latestAdoption": [{"date": "2026-05-20", "pct": 20.22, "version": "31.0+"}, {"date": "2026-05-21", "pct": 21.02, "version": "31.0+"}, {"date": "2026-05-23", "pct": 21.73, "version": "31.0+"}, {"date": "2026-05-24", "pct": 22.55, "version": "31.0+"}, {"date": "2026-05-25", "pct": 23.23, "version": "31.0+"}, {"date": "2026-05-31", "pct": 24.07, "version": "31.0+"}, {"date": "2026-06-06", "pct": 15.87, "version": "77.0+"}, {"date": "2026-06-13", "pct": 17.48, "version": "77.0+"}, {"date": "2026-06-20", "pct": 18.93, "version": "77.0+"}, {"date": "2026-06-25", "pct": 0.02, "version": "77.0+"}, {"date": "2026-06-27", "pct": 0.04, "version": "77.0+"}, {"date": "2026-06-28", "pct": 0.05, "version": "77.0+"}, {"date": "2026-06-30", "pct": 0.06, "version": "77.0+"}, {"date": "2026-07-02", "pct": 0.06, "version": "77.0+"}, {"date": "2026-07-03", "pct": 0.06, "version": "77.0+"}, {"date": "2026-07-04", "pct": 0.07, "version": "77.0+"}, {"date": "2026-07-05", "pct": 0.06, "version": "77.0+"}, {"date": "2026-07-07", "pct": 0.07, "version": "77.0+"}, {"date": "2026-07-08", "pct": 0.09, "version": "77.0+"}, {"date": "2026-07-09", "pct": 0.46, "version": "77.0+"}, {"date": "2026-07-11", "pct": 0.61, "version": "77.0+"}, {"date": "2026-07-12", "pct": 0.77, "version": "77.0+"}, {"date": "2026-07-14", "pct": 1.06, "version": "77.0+"}, {"date": "2026-07-16", "pct": 1.31, "version": "77.0+"}, {"date": "2026-07-17", "pct": 1.44, "version": "77.0+"}, {"date": "2026-07-18", "pct": 1.76, "version": "77.0+"}, {"date": "2026-07-20", "pct": 1.92, "version": "77.0+"}, {"date": "2026-07-21", "pct": 2.05, "version": "77.0+"}, {"date": "2026-07-22", "pct": 2.23, "version": "77.0+"}, {"date": "2026-07-23", "pct": 2.51, "version": "77.0+"}, {"date": "2026-07-24", "pct": 2.62, "version": "77.0+"}, {"date": "2026-07-25", "pct": 2.79, "version": "77.0+"}, {"date": "2026-07-27", "pct": 2.9, "version": "77.0+"}, {"date": "2026-07-28", "pct": 3.01, "version": "77.0+"}, {"date": "2026-07-29", "pct": 3.29, "version": "77.0+"}, {"date": "2026-07-31", "pct": 3.35, "version": "77.0+"}, {"date": "2026-08-02", "pct": 3.61, "version": "77.0+"}, {"date": "2026-08-03", "pct": 3.88, "version": "77.0+"}, {"date": "2026-08-04", "pct": 4.26, "version": "77.0+"}, {"date": "2026-08-06", "pct": 4.39, "version": "77.0+"}, {"date": "2026-08-07", "pct": 4.77, "version": "77.0+"}, {"date": "2026-08-08", "pct": 4.8, "version": "77.0+"}, {"date": "2026-08-10", "pct": 5.26, "version": "77.0+"}, {"date": "2026-08-11", "pct": 5.58, "version": "77.0+"}, {"date": "2026-08-13", "pct": 6.45, "version": "77.0+"}, {"date": "2026-08-14", "pct": 6.77, "version": "77.0+"}, {"date": "2026-08-15", "pct": 7.08, "version": "77.0+"}, {"date": "2026-08-16", "pct": 7.27, "version": "77.0+"}], "sources": {"bitnodes-csv": {"ts": "2026-08-16", "total": 46728, "share": {"0.11": 4.2800890258517374e-05, "0.12": 0.0003210066769388803, "0.13": 0.00025680534155110427, "0.14": 0.00012840267077555214, "0.15": 0.00023540489642184556, "0.16": 0.000342407122068139, "0.17": 0.0015408320493066256, "0.18": 0.0011342235918507105, "0.19": 0.0003852080123266564, "0.20": 0.0031030645437425098, "0.21": 0.0037450778976202705, "0.8": 0.0003210066769388803, "0.9": 8.560178051703475e-05, "1.0": 8.560178051703475e-05, "21.0": 2.1400445129258687e-05, "22.0": 0.013589282657079267, "22.1": 8.560178051703475e-05, "22.99": 4.2800890258517374e-05, "23.0": 0.0049863037151172745, "23.1": 0.00023540489642184556, "23.2": 2.1400445129258687e-05, "23.99": 6.420133538777607e-05, "24.0": 0.007233350453689437, "24.1": 0.0005350111282314672, "24.2": 0.0004066084574559151, "24.99": 0.00023540489642184556, "25.0": 0.0185969868173258, "25.1": 0.02234206471494607, "25.2": 0.00044940934771443245, "25.99": 0.0005564115733607259, "26.0": 0.029596815613764767, "26.1": 0.0017976373908577298, "26.2": 0.0014980311590481082, "26.99": 0.00012840267077555214, "27.0": 0.04513353877760658, "27.1": 0.02069423043999315, "27.2": 0.004215887690463962, "27.99": 0.0009202191405581236, "28.0": 0.016264338298236602, "28.1": 0.07960965588084232, "28.2": 0.0013482280431432975, "28.3": 0.0014980311590481082, "28.4": 0.0014766307139188494, "28.99": 0.0008560178051703475, "29.0": 0.03897021058038007, "29.1": 0.023433487416538265, "29.2": 0.03481852422530388, "29.3": 0.06409433316212977, "29.4": 0.003231467214518062, "29.99": 0.000342407122068139, "30.0": 0.03310648861496319, "30.1": 0.0007704160246533128, "30.2": 0.0525808936825886, "30.3": 0.0013268275980140387, "30.99": 0.0005992124636192433, "31.0": 0.19157678479712378, "31.1": 0.05746019517205958, "31.99": 0.002953261427837699, "77.0": 4.2800890258517374e-05}}, "bitnodes": {"ts": "2026-08-16", "total": 27352, "share": {"0.11": 3.6560397777127814e-05, "0.12": 0.0002193623866627669, "0.13": 0.0002193623866627669, "0.14": 0.00018280198888563908, "0.15": 0.00018280198888563908, "0.16": 0.00036560397777127816, "0.17": 0.0012796139221994734, "0.18": 0.0010968119333138345, "0.19": 0.0005484059666569172, "0.20": 0.004533489324363849, "0.21": 0.004241006142146827, "0.8": 0.00010968119333138345, "0.9": 3.6560397777127814e-05, "1.0": 0.00010968119333138345, "22.0": 0.011772448084235157, "22.1": 0.00014624159110851126, "22.99": 7.312079555425563e-05, "23.0": 0.004570049722140977, "23.1": 0.0002559227844398947, "23.2": 3.6560397777127814e-05, "23.99": 3.6560397777127814e-05, "24.0": 0.007458321146534074, "24.1": 0.0006215267622111728, "24.2": 0.0004387247733255338, "24.99": 0.00040216437554840595, "25.0": 0.0227405674173735, "25.1": 0.03027200935946183, "25.2": 0.0004752851711026616, "25.99": 0.0006946475577654285, "26.0": 0.03612167300380228, "26.1": 0.0017183386955250074, "26.2": 0.0016817782977478794, "26.99": 0.00018280198888563908, "27.0": 0.03696256215267622, "27.1": 0.024861070488446914, "27.2": 0.005301257677683534, "27.99": 0.0011333723310909623, "28.0": 0.01890172565077508, "28.1": 0.07056156770985668, "28.2": 0.0017183386955250074, "28.3": 0.0014258555133079848, "28.4": 0.001389295115530857, "28.99": 0.0004752851711026616, "29.0": 0.04054548113483475, "29.1": 0.02288680900848201, "29.2": 0.043031588183679435, "29.3": 0.07385200350979819, "29.4": 0.005301257677683534, "29.99": 0.00036560397777127816, "30.0": 0.031917227259432586, "30.1": 0.0008774495466510676, "30.2": 0.04149605147704007, "30.3": 0.0020473822755191578, "30.99": 0.0006215267622111728, "31.0": 0.180206200643463, "31.1": 0.08131032465633226, "31.99": 0.0034732377888271426}}, "dsn": {"ts": "2026-07-26", "total": 224, "share": {"0.16": 0.017857142857142856, "0.19": 0.0, "0.20": 0.03571428571428571, "0.21": 0.03125, "1.0": 0.0, "22.0": 0.11607142857142858, "23.0": 0.04017857142857143, "24.0": 0.10714285714285714, "25.0": 0.08482142857142858, "26.0": 0.08928571428571429, "27.0": 0.17410714285714285, "27.1": 0.18303571428571427, "28.0": 0.12053571428571429}}}, "wayback": [{"date": "2016-05-12", "total": 3650}, {"date": "2016-08-24", "total": 3723}, {"date": "2016-10-31", "total": 3671}, {"date": "2016-11-02", "total": 3830}, {"date": "2016-11-05", "total": 3864}, {"date": "2016-11-08", "total": 3795}, {"date": "2016-11-10", "total": 3902}, {"date": "2016-11-11", "total": 3907}, {"date": "2016-11-13", "total": 3920}, {"date": "2016-11-14", "total": 3960}, {"date": "2016-11-17", "total": 3931}, {"date": "2016-11-20", "total": 3862}, {"date": "2016-11-23", "total": 3935}, {"date": "2016-11-25", "total": 3728}, {"date": "2016-11-28", "total": 3834}, {"date": "2016-11-29", "total": 3865}, {"date": "2016-12-07", "total": 3866}, {"date": "2016-12-13", "total": 3973}, {"date": "2016-12-20", "total": 4054}, {"date": "2016-12-24", "total": 4117}, {"date": "2017-01-01", "total": 4215}, {"date": "2017-01-04", "total": 4156}, {"date": "2017-01-07", "total": 4199}, {"date": "2017-01-12", "total": 4186}, {"date": "2017-03-07", "total": 4216}, {"date": "2017-05-15", "total": 5079}, {"date": "2017-05-30", "total": 5503}, {"date": "2017-09-08", "total": 5824}, {"date": "2017-09-28", "total": 5606}, {"date": "2017-11-14", "total": 6564}, {"date": "2017-12-01", "total": 6953}, {"date": "2018-06-18", "total": 8173}, {"date": "2018-06-28", "total": 7882}, {"date": "2018-10-04", "total": 7753}, {"date": "2018-12-29", "total": 7667}, {"date": "2019-05-23", "total": 7145}, {"date": "2019-07-13", "total": 7614}, {"date": "2019-08-20", "total": 7226}, {"date": "2019-09-21", "total": 7174}, {"date": "2019-10-19", "total": 7316}, {"date": "2019-11-15", "total": 7462}, {"date": "2019-11-20", "total": 7422}, {"date": "2019-12-08", "total": 7233}, {"date": "2019-12-20", "total": 7409}]};
+const state = { days: 0, impls: new Set(["core","knots","bip110","other"]),
+                versions: new Set() };
+
 const C = getComputedStyle(document.documentElement);
 const col = n => C.getPropertyValue(n).trim();
 const fmt = n => n.toLocaleString('en-US');
 const hasCharts = (typeof Chart !== 'undefined');
+if (hasCharts && typeof ChartZoom !== 'undefined') {
+  try { Chart.register(ChartZoom); } catch(e){}
+}
 if (hasCharts) {
   Chart.defaults.color = col('--muted');
   Chart.defaults.font.family = "ui-monospace, monospace";
   Chart.defaults.font.size = 11;
 }
 const gridc = col('--grid');
-// Helper: crear chart sólo si la librería cargó; si no, mostrar aviso.
-function chart(id, cfg){
-  const el = document.getElementById(id);
-  if(!el) return;
-  if(!hasCharts){
-    const p=document.createElement('div'); p.className='note';
-    p.textContent='(gráfico no disponible sin conexión a la librería de charts)';
-    el.replaceWith(p); return;
+let charts = {};
+
+// ---- helpers de datos -----------------------------------------------------
+// vk: "impl|version"  ->  {impl, base, ver, mm}
+const VK = D.series.vk.map(k => {
+  const [impl, ver] = k.split("|");
+  const base = impl.endsWith("-bip110") ? "bip110"
+             : (impl === "core" || impl === "knots") ? impl : "other";
+  const p = ver.split(".");
+  const mm = (p.length > 1) ? p[0] + "." + p[1] : ver;
+  const implBase = impl.replace("-bip110","");
+  return { impl, implBase, base, ver, mm, label: implBase + " " + mm };
+});
+
+function snapsInRange(){
+  const s = D.series.snaps;
+  if (!state.days) return s;
+  return s.slice(Math.max(0, s.length - state.days));
+}
+function implOK(v){ return state.impls.has(v.base); }
+
+// Agrega un snapshot: devuelve {total, byBase, byLabel, bip:{knots,core}}
+function agg(sn){
+  let total = 0; const byBase = {core:0,knots:0,bip110:0,other:0};
+  const byLabel = {}; let bipK = 0, bipC = 0; const mmSet = new Set();
+  const verCount = {};
+  for (const [idx, n] of sn.c){
+    const v = VK[idx];
+    if (!implOK(v)) continue;
+    total += n;
+    byBase[v.base] += n;
+    byLabel[v.label] = (byLabel[v.label]||0) + n;
+    verCount[v.implBase + " " + v.ver] = (verCount[v.implBase+" "+v.ver]||0)+n;
+    mmSet.add(v.implBase + " " + v.ver);
+    if (v.base === "bip110"){ if (v.implBase === "knots") bipK += n; else bipC += n; }
   }
-  new Chart(el, cfg);
+  return { total, byBase, byLabel, bip:{knots:bipK, core:bipC},
+           distinct: mmSet.size };
 }
 
-// --- valores numéricos (no dependen del idioma) ---
-document.getElementById('bipPct').textContent = D.bip.pct.toFixed(2) + '%';
-document.getElementById('bipKnots').textContent = fmt(D.bip.knots);
-document.getElementById('bipCore').textContent = fmt(D.bip.core);
-document.getElementById('bipTotal').textContent = fmt(D.bip.networkTotal);
+function mmKey(mm){ const p = mm.split("."); return [parseInt(p[0])||0, parseInt(p[1])||0]; }
 
-let charts = {};   // referencias para poder re-etiquetar al cambiar idioma
-
-function buildCharts(t){
-  Object.values(charts).forEach(c => { if(c && c.destroy) c.destroy(); });
-  charts = {};
-  const bipSeries = D.timeseries.filter(p => p.bip110 > 0);
-  charts.bip = mkchart('bipTs', {
-    type:'line',
-    data:{ labels:(bipSeries.length?bipSeries:D.timeseries).map(p=>p.date),
-      datasets:[{ data:(bipSeries.length?bipSeries:D.timeseries).map(p=>p.bip110),
-        borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.12)',
-        fill:true, tension:.25, pointRadius:3 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        title:{display:true,text:t.axisSignaling}}}}
-  });
-  charts.dist = mkchart('dist', {
-    type:'bar',
-    data:{ labels:D.distribution.map(d=>d[0]),
-      datasets:[{ data:D.distribution.map(d=>d[1]),
-        backgroundColor:D.distribution.map(d=>
-          d[0].startsWith('knots')?col('--knots'):
-          d[0].startsWith('core')?col('--core'):col('--muted')),
-        borderRadius:3 }]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{display:false}}}}
-  });
-  charts.evo = mkchart('evo', {
-    type:'line',
-    data:{ labels:D.timeseries.map(p=>p.date),
-      datasets:[
-        {label:'Core',data:D.timeseries.map(p=>p.core),
-         borderColor:col('--core'),tension:.25,pointRadius:2},
-        {label:'Knots',data:D.timeseries.map(p=>p.knots),
-         borderColor:col('--knots'),tension:.25,pointRadius:2}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{boxWidth:12}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true}}}
-  });
-  // Core vs Knots (% de la red)
-  charts.ck = mkchart('ck', {
-    type:'line',
-    data:{ labels:D.implShare.map(p=>p.date),
-      datasets:[
-        {label:'Core %',data:D.implShare.map(p=>p.core),
-         borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',
-         fill:true,tension:.25,pointRadius:2},
-        {label:'Knots %',data:D.implShare.map(p=>p.knots),
-         borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',
-         fill:true,tension:.25,pointRadius:2}]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{labels:{boxWidth:12}}},
-      scales:{x:{grid:{color:gridc}},
-        y:{grid:{color:gridc},beginAtZero:true,
-          ticks:{callback:v=>v+'%'}}}}
-  });
-  // Cola larga (nodos en versiones viejas)
-  charts.stale = mkchart('stale', {
-    type:'line',
-    data:{ labels:D.stale.map(p=>p.date),
-      datasets:[{ label:t.staleHead, data:D.stale.map(p=>p.stale),
-        borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',
-        fill:true,tension:.25,pointRadius:2 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{afterLabel:(c)=>{
-          const p=D.stale[c.dataIndex]; return p?('· '+p.pct+'% of Core'):'';}}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        title:{display:true,text:t.axisStale}}}}
-  });
-  // Adopción de la última versión
-  charts.adopt = mkchart('adopt', {
-    type:'line',
-    data:{ labels:D.latestAdoption.map(p=>p.date),
-      datasets:[{ data:D.latestAdoption.map(p=>p.pct),
-        borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.10)',
-        fill:true,tension:.25,pointRadius:3 }]},
-    options:{responsive:true,maintainAspectRatio:false,
-      plugins:{legend:{display:false},
-        tooltip:{callbacks:{afterLabel:(c)=>{
-          const p=D.latestAdoption[c.dataIndex];
-          return p?('v'+p.version):'';}}}},
-      scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc},beginAtZero:true,
-        ticks:{callback:v=>v+'%'}}}}
-  });
-  if(D.wayback.length){
-    charts.hist = mkchart('hist', {
-      type:'line',
-      data:{ labels:D.wayback.map(p=>p.date),
-        datasets:[{ data:D.wayback.map(p=>p.total), borderColor:col('--ink'),
-          backgroundColor:'rgba(230,237,243,.06)', fill:true,
-          tension:.2, pointRadius:2 }]},
-      options:{responsive:true,maintainAspectRatio:false,
-        plugins:{legend:{display:false}},
-        scales:{x:{grid:{color:gridc}},y:{grid:{color:gridc}}}}
-    });
+// Cola larga: core con major <= newestMajor-3, o 0.x
+function staleOf(sn){
+  let stale = 0, coreTot = 0, newest = 0;
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (v.implBase !== "core") continue;
+    const M = mmKey(v.mm)[0];
+    if (mmKey(v.mm)[1] !== 99) newest = Math.max(newest, M);
+    coreTot += n;
   }
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (v.implBase !== "core") continue;
+    const M = mmKey(v.mm)[0];
+    if (M === 0 || M < newest - 2) stale += n;
+  }
+  return { stale, pct: coreTot ? 100*stale/coreTot : 0 };
 }
-// mkchart: como chart(), pero devuelve la instancia (o null) para destruir luego
-function mkchart(id, cfg){
+
+function shareOfVersion(sn, label){
+  let hit = 0, tot = 0;
+  for (const [idx,n] of sn.c){
+    const v = VK[idx];
+    if (!implOK(v)) continue;
+    tot += n;
+    if (v.label === label) hit += n;
+  }
+  return tot ? 100*hit/tot : 0;
+}
+
+// ---- construcción de gráficos --------------------------------------------
+function mk(id, cfg){
   const el = document.getElementById(id);
-  if(!el) return null;
-  if(!hasCharts){
-    if(!el.dataset.noted){
-      const p=document.createElement('div'); p.className='note';
-      p.textContent=I18N[LANG].noChart; el.replaceWith(p);
-    }
-    return null;
+  if (!el) return null;
+  if (!hasCharts){
+    const p = document.createElement('div'); p.className='note';
+    p.textContent = I18N[LANG].noChart; el.replaceWith(p); return null;
   }
   return new Chart(el, cfg);
 }
+const ZOOM = {
+  zoom:{ wheel:{enabled:true}, pinch:{enabled:true}, mode:'x' },
+  pan:{ enabled:true, mode:'x' }
+};
+function baseOpts(t, extra){
+  const o = { responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false}, zoom: ZOOM },
+    scales:{ x:{grid:{color:gridc}}, y:{grid:{color:gridc},beginAtZero:true} } };
+  return Object.assign(o, extra||{});
+}
 
-function applyLang(lang){
-  LANG = lang;
-  const t = I18N[lang];
-  document.documentElement.lang = lang;
-  // Textos con data-i18n
-  document.querySelectorAll('[data-i18n]').forEach(el=>{
-    const k = el.getAttribute('data-i18n');
-    if(t[k]) el.textContent = t[k];
-  });
-  // Sello
-  document.getElementById('stamp').textContent =
-    t.generated + ' ' + D.generated + ' · ' + D.snapshotDate +
-    ' · ' + t.source + ' ' + D.primarySource;
-  // Stats
+function rebuild(){
+  const t = I18N[LANG];
+  Object.values(charts).forEach(c => { if (c && c.destroy) c.destroy(); });
+  charts = {};
+
+  const snaps = snapsInRange();
+  const labels = snaps.map(s => s.d);
+  const aggs = snaps.map(agg);
+  const last = aggs.length ? aggs[aggs.length-1] : {total:0,byBase:{},byLabel:{},bip:{knots:0,core:0},distinct:0};
+  const lastSnap = snaps.length ? snaps[snaps.length-1] : {c:[],d:"—"};
+
+  // --- stats + BIP-110 (del último snapshot del rango) ---
+  const bipTot = last.bip.knots + last.bip.core;
+  document.getElementById('bipPct').textContent =
+    (last.total ? (100*bipTot/last.total) : 0).toFixed(2) + '%';
+  document.getElementById('bipKnots').textContent = fmt(last.bip.knots);
+  document.getElementById('bipCore').textContent = fmt(last.bip.core);
+  document.getElementById('bipTotal').textContent = fmt(last.total);
+
+  const distArr = Object.entries(last.byLabel).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  const dominant = distArr.length ? distArr[0][0] : "—";
+  const knotsPct = last.total ? 100*last.byBase.knots/last.total : 0;
   const sr = document.getElementById('statRow'); sr.innerHTML='';
-  [[t.statNodes, fmt(D.networkTotal)],
-   [t.statDominant, D.dominant],
-   [t.statKnots, D.knotsPct.toFixed(1)+'%'],
-   [t.statVersions, D.distinctVersions]
+  [[t.statNodes, fmt(last.total)],
+   [t.statDominant, dominant],
+   [t.statKnots, knotsPct.toFixed(1)+'%'],
+   [t.statVersions, last.distinct]
   ].forEach(([l,n])=>{
     const d=document.createElement('div'); d.className='stat';
-    d.innerHTML=`<div class="n">${n}</div><div class="l">${l}</div>`;
+    d.innerHTML='<div class="n">'+n+'</div><div class="l">'+l+'</div>';
     sr.appendChild(d);
   });
   document.getElementById('distNote').textContent =
-    t.distNote.replace('{n}', D.distribution.length);
-  // Fuentes
-  const sw = document.getElementById('srcWrap');
-  if(Object.keys(D.sources).length>1){
-    const [c0,c1,c2]=t.srcCols;
-    let html=`<table><thead><tr><th>${c0}</th><th>${c1}</th>`+
-      `<th class="num">${c2}</th></tr></thead><tbody>`;
-    Object.entries(D.sources).forEach(([k,v])=>{ html+=`<tr><td>${k}</td>`+
-      `<td>${v.ts}</td><td class="num">${fmt(v.total)}</td></tr>`; });
-    sw.innerHTML=html+'</tbody></table>';
-  }else{
-    sw.innerHTML=`<p class="note">${t.srcOne}</p>`;
+    t.distNote.replace('{n}', distArr.length) + '  ·  ' + lastSnap.d;
+
+  // --- BIP-110 en el tiempo ---
+  charts.bip = mk('bipTs', { type:'line',
+    data:{ labels, datasets:[{ data: aggs.map(a=>a.bip.knots+a.bip.core),
+      borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.12)',
+      fill:true, tension:.25, pointRadius:2 }]},
+    options: baseOpts(t, { scales:{ x:{grid:{color:gridc}},
+      y:{grid:{color:gridc},beginAtZero:true,
+         title:{display:true,text:t.axisSignaling}} } }) });
+
+  // --- distribución del snapshot ---
+  charts.dist = mk('dist', { type:'bar',
+    data:{ labels: distArr.map(d=>d[0]),
+      datasets:[{ data: distArr.map(d=>d[1]),
+        backgroundColor: distArr.map(d=> d[0].startsWith('knots')?col('--knots')
+          : d[0].startsWith('core')?col('--core'):col('--other')),
+        borderRadius:3 }]},
+    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{display:false}},
+      scales:{x:{grid:{color:gridc}},y:{grid:{display:false}}} } });
+
+  // --- comparación de versiones ---
+  const palette = [col('--core'),col('--knots'),col('--signal'),'#3fb950','#db6d28','#a371f7'];
+  const sel = [...state.versions];
+  if (sel.length){
+    charts.ver = mk('verChart', { type:'line',
+      data:{ labels, datasets: sel.map((lab,i)=>({
+        label: lab, borderColor: palette[i%palette.length],
+        data: snaps.map(s=>shareOfVersion(s,lab)),
+        tension:.25, pointRadius:2, borderWidth:2 })) },
+      options: baseOpts(t, { plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM},
+        scales:{ x:{grid:{color:gridc}},
+          y:{grid:{color:gridc},beginAtZero:true,
+             ticks:{callback:v=>v+'%'},
+             title:{display:true,text:t.axisShare}} } }) });
+  } else {
+    const el = document.getElementById('verChart');
+    if (el && el.getContext){ const ctx = el.getContext('2d');
+      ctx.clearRect(0,0,el.width,el.height); }
   }
-  // Pie
-  document.getElementById('foot').innerHTML =
-    t.foot.replace('{d}', D.generated);
-  // Botones activos
-  document.querySelectorAll('#langToggle button').forEach(b=>{
-    b.classList.toggle('active', b.dataset.lang===lang);
-  });
-  // Charts (recrear para actualizar etiquetas de ejes traducidas)
-  if(hasCharts) buildCharts(t);
+
+  // --- evolución por implementación ---
+  const dsEvo = [];
+  if (state.impls.has('core')) dsEvo.push({label:'Core',
+    data:aggs.map(a=>a.byBase.core), borderColor:col('--core'),tension:.25,pointRadius:2});
+  if (state.impls.has('knots')) dsEvo.push({label:'Knots',
+    data:aggs.map(a=>a.byBase.knots), borderColor:col('--knots'),tension:.25,pointRadius:2});
+  if (state.impls.has('bip110')) dsEvo.push({label:'BIP-110',
+    data:aggs.map(a=>a.byBase.bip110), borderColor:col('--signal'),tension:.25,pointRadius:2});
+  charts.evo = mk('evo', { type:'line', data:{labels, datasets:dsEvo},
+    options: baseOpts(t, {plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM}}) });
+
+  // --- cuota por implementación ---
+  const dsCk = [];
+  const pct = (k) => aggs.map(a => a.total ? 100*a.byBase[k]/a.total : 0);
+  if (state.impls.has('core')) dsCk.push({label:'Core %',data:pct('core'),
+    borderColor:col('--core'),backgroundColor:'rgba(68,147,248,.08)',fill:true,tension:.25,pointRadius:2});
+  if (state.impls.has('knots')) dsCk.push({label:'Knots %',data:pct('knots'),
+    borderColor:col('--knots'),backgroundColor:'rgba(188,140,255,.10)',fill:true,tension:.25,pointRadius:2});
+  if (state.impls.has('bip110')) dsCk.push({label:'BIP-110 %',data:pct('bip110'),
+    borderColor:col('--signal'),backgroundColor:'rgba(240,160,32,.10)',fill:true,tension:.25,pointRadius:2});
+  charts.ck = mk('ck', { type:'line', data:{labels,datasets:dsCk},
+    options: baseOpts(t, {plugins:{legend:{labels:{boxWidth:12}},zoom:ZOOM},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,ticks:{callback:v=>v+'%'}}}}) });
+
+  // --- cola larga ---
+  const st = snaps.map(staleOf);
+  charts.stale = mk('stale', { type:'line',
+    data:{labels, datasets:[{ data: st.map(s=>s.stale),
+      borderColor:col('--signal'), backgroundColor:'rgba(240,160,32,.10)',
+      fill:true, tension:.25, pointRadius:2 }]},
+    options: baseOpts(t, { plugins:{legend:{display:false},zoom:ZOOM,
+      tooltip:{callbacks:{afterLabel:(c)=> '· '+st[c.dataIndex].pct.toFixed(1)+'% of Core'}}},
+      scales:{x:{grid:{color:gridc}},
+        y:{grid:{color:gridc},beginAtZero:true,title:{display:true,text:t.axisStale}}} }) });
+
+  // --- historia wayback (no depende de los filtros) ---
+  if (D.wayback.length){
+    charts.hist = mk('hist', { type:'line',
+      data:{ labels: D.wayback.map(p=>p.date),
+        datasets:[{ data: D.wayback.map(p=>p.total), borderColor:col('--ink'),
+          backgroundColor:'rgba(230,237,243,.06)', fill:true, tension:.2, pointRadius:2 }]},
+      options: baseOpts(t, {plugins:{legend:{display:false},zoom:ZOOM}}) });
+  }
 }
 
-document.querySelectorAll('#langToggle button').forEach(b=>{
-  b.addEventListener('click', ()=>applyLang(b.dataset.lang));
-});
+// ---- i18n + render estático ----------------------------------------------
+function applyLang(lang){
+  LANG = lang; const t = I18N[lang];
+  document.documentElement.lang = lang;
+  document.querySelectorAll('[data-i18n]').forEach(el=>{
+    const k = el.getAttribute('data-i18n'); if (t[k]) el.textContent = t[k];
+  });
+  document.getElementById('stamp').textContent =
+    t.generated + ' ' + D.generated + ' · ' + t.source + ' ' + D.primarySource;
+  const sw = document.getElementById('srcWrap');
+  const [c0,c1,c2] = t.srcCols;
+  let html = '<table><thead><tr><th>'+c0+'</th><th>'+c1+'</th><th class="num">'+c2+'</th></tr></thead><tbody>';
+  Object.entries(D.sources).forEach(([k,v])=>{
+    html += '<tr><td>'+k+'</td><td>'+v.ts+'</td><td class="num">'+fmt(v.total)+'</td></tr>';
+  });
+  sw.innerHTML = html + '</tbody></table>';
+  document.getElementById('foot').textContent = t.foot.replace('{d}', D.generated);
+  document.querySelectorAll('#langToggle button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.lang===lang); });
+  rebuild();
+}
 
-// Idioma inicial: inglés por defecto; respeta ?lang=es o el navegador.
-// Idioma por defecto: SIEMPRE inglés. El español es opt-in vía el botón
-// o vía ?lang=es en la URL (útil para compartir el link ya en español).
-// No se autodetecta el idioma del navegador a propósito: el público
-// objetivo (dev de Bitcoin, grant) lee en inglés.
+// ---- controles ------------------------------------------------------------
+function initControls(){
+  // versiones disponibles (por label, ordenadas por presencia en el último snap)
+  const lastSnap = D.series.snaps[D.series.snaps.length-1];
+  const tally = {};
+  if (lastSnap) for (const [idx,n] of lastSnap.c){
+    const v = VK[idx]; tally[v.label] = (tally[v.label]||0)+n;
+  }
+  const opts = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,25);
+  const sel = document.getElementById('verSelect');
+  sel.size = 4;   // lista visible: multi-selección con ctrl/cmd+clic
+  opts.forEach(([lab])=>{
+    const o = document.createElement('option'); o.value=lab; o.textContent=lab;
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change', ()=>{
+    state.versions = new Set([...sel.selectedOptions].map(o=>o.value));
+    rebuild();
+  });
+  document.querySelectorAll('.chip.range').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      document.querySelectorAll('.chip.range').forEach(x=>x.classList.remove('on'));
+      b.classList.add('on');
+      state.days = parseInt(b.dataset.days)||0;
+      rebuild();
+    });
+  });
+  document.querySelectorAll('.chip.impl').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const k = b.dataset.impl;
+      if (state.impls.has(k) && state.impls.size > 1){ state.impls.delete(k); b.classList.remove('on'); }
+      else { state.impls.add(k); b.classList.add('on'); }
+      rebuild();
+    });
+  });
+  document.getElementById('resetBtn').addEventListener('click', ()=>{
+    state.days = 0; state.impls = new Set(["core","knots","bip110","other"]);
+    state.versions = new Set();
+    document.querySelectorAll('.chip.range').forEach(x=>x.classList.toggle('on', x.dataset.days==="0"));
+    document.querySelectorAll('.chip.impl').forEach(x=>x.classList.add('on'));
+    [...sel.options].forEach(o=>o.selected=false);
+    Object.values(charts).forEach(c=>{ if(c&&c.resetZoom) try{c.resetZoom();}catch(e){} });
+    rebuild();
+  });
+  document.querySelectorAll('#langToggle button').forEach(b=>{
+    b.addEventListener('click', ()=>applyLang(b.dataset.lang)); });
+  // doble clic en un gráfico -> reset zoom
+  document.querySelectorAll('canvas').forEach(cv=>{
+    cv.addEventListener('dblclick', ()=>{
+      Object.values(charts).forEach(c=>{ if(c&&c.resetZoom) try{c.resetZoom();}catch(e){} });
+    });
+  });
+}
+
+initControls();
 const urlLang = new URLSearchParams(location.search).get('lang');
 applyLang(urlLang && I18N[urlLang] ? urlLang : 'en');
-if(!hasCharts) buildCharts(I18N[LANG]);  // dispara los avisos de "no chart"
 </script>
 </body>
 </html>
