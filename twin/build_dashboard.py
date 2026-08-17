@@ -126,7 +126,7 @@ def timeseries(con, source="bitnodes"):
 def source_compare(con):
     """Último snapshot de cada fuente: total y share por versión Core."""
     res = {}
-    for src in ("bitnodes", "dsn"):
+    for src in ("bitnodes-csv", "bitnodes", "dsn"):
         r = con.execute("SELECT MAX(ts) FROM snapshots WHERE source=?",
                         (src,)).fetchone()
         if not r or r[0] is None:
@@ -741,7 +741,20 @@ def main():
     args = ap.parse_args()
 
     con = con_ro(args.telemetry)
-    ts, rows = latest_snapshot(con, "bitnodes")
+
+    # Elegir la fuente primaria: preferir 'bitnodes-csv' (dataset CSV
+    # completo, ~46k nodos, serie desde mayo) si tiene datos; si no, caer
+    # a 'bitnodes' (scraping HTML viejo). Así el dashboard usa la mejor
+    # fuente disponible sin hardcodear.
+    def _has(src):
+        r = con.execute("SELECT COUNT(*) FROM snapshots WHERE source=?",
+                        (src,)).fetchone()
+        return r and r[0] > 0
+    PRIMARY = "bitnodes-csv" if _has("bitnodes-csv") else "bitnodes"
+    SRC_LABEL = "bitnod.es (CSV dataset)" if PRIMARY == "bitnodes-csv" \
+        else "bitnod.es"
+
+    ts, rows = latest_snapshot(con, PRIMARY)
     dist, total = current_distribution(rows)
     split = impl_split(rows)
     knots_bip, core_bip = bip110_count(rows)
@@ -754,7 +767,7 @@ def main():
     data = {
         "generated": datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         "snapshotDate": iso(ts),
-        "primarySource": "bitnod.es",
+        "primarySource": SRC_LABEL,
         "networkTotal": total,
         "dominant": dominant,
         "knotsPct": 100.0 * split.get("knots", 0) / total if total else 0,
@@ -765,10 +778,10 @@ def main():
             "networkTotal": total,
             "pct": 100.0 * (knots_bip + core_bip) / total if total else 0,
         },
-        "timeseries": timeseries(con, "bitnodes"),
-        "implShare": impl_share_series(con, "bitnodes"),
-        "stale": stale_series(con, "bitnodes"),
-        "latestAdoption": latest_adoption_series(con, "bitnodes"),
+        "timeseries": timeseries(con, PRIMARY),
+        "implShare": impl_share_series(con, PRIMARY),
+        "stale": stale_series(con, PRIMARY),
+        "latestAdoption": latest_adoption_series(con, PRIMARY),
         "sources": source_compare(con),
         "wayback": wayback_series(args.wayback),
     }
