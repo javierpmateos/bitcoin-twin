@@ -1,111 +1,131 @@
 # bitcoin-twin
 
-Gemelo digital adaptativo del ecosistema Bitcoin.
+An adaptive digital twin of the Bitcoin network.
 
-En lugar de una testnet con condiciones inventadas: una red sintética de
-nodos reales (Bitcoin Core sobre [Warnet]) poblada por agentes cuyo
-comportamiento se calibra continuamente contra telemetría de mainnet.
+Instead of a testnet with invented conditions: a synthetic network of real
+nodes (Bitcoin Core on Warnet) populated by agents whose behavior is
+continuously calibrated against mainnet telemetry. A reproducible testbench
+for studying software deployments, network events, and protocol behavior
+before they reach mainnet.
 
-Primer módulo implementado y cerrado: **adopción de versiones**. La red
-sintética replica la distribución de versiones real de mainnet y
-reproduce la dinámica de actualización cuando aparece un release nuevo,
-con un loop de validación y recalibración contra los datos reales.
+**Live dashboard:** https://javierpmateos.github.io/bitcoin-twin/
 
-[Warnet]: https://github.com/bitcoin-dev-project/warnet
+First module implemented and closed: version adoption. The synthetic
+network replicates mainnet's real version distribution and reproduces the
+update dynamics when a new release appears, with a validation-and-
+recalibration loop against real data.
 
-## El loop
+## The loop
 
 ```
-telemetría de mainnet (bitnod.es, GitHub releases)
-        │  bitnodes_ingest.py ingest        (cron diario -> SQLite)
+mainnet telemetry (bitnod.es CSV datasets, GitHub releases)
+        │  csv_ingest.py ingest            (scheduled -> SQLite)
         ▼
-modelo de adopción (hazard discreto: perfiles + imitación + CVEs)
-        │  validator.py calibrate           (fit contra la curva real)
+adoption model (discrete-time hazard: profiles + imitation + CVEs)
+        │  validator.py calibrate          (fit against the real curve)
         ▼
-orquestador de agentes
-        │  orchestrator.py run --profiles   (upgrades tick a tick)
+agent orchestrator
+        │  orchestrator.py run --profiles  (tick-by-tick upgrades)
         ▼
-red sintética Warnet (nodos con versiones mixtas, réplica de mainnet)
-        │  orchestrator.py gen-network      (muestreo del snapshot real)
+synthetic Warnet network (mixed-version nodes, mainnet replica)
+        │  orchestrator.py gen-network     (samples the real snapshot)
         ▼
-validador
-        │  validator.py compare             (RMSE, error máx, veredicto)
-        └──────────► ↻ recalibra el modelo
+validator
+        │  validator.py compare            (RMSE, max error, verdict)
+        └──────────► ↻ recalibrates the model
 ```
 
-## Estado
+## Status
 
-- [x] Telemetría: ingesta diaria de bitnod.es a SQLite. (bitnodes.io,
-      la fuente histórica del ecosistema, murió el 2026-05-03 cuando su
-      dominio expiró; 13 años de datos públicos se perdieron. La serie
-      histórica propia de este proyecto se acumula desde 2026-07-21.)
-- [x] Modelo de adopción calibrable (5 perfiles, efecto imitación,
-      releases de seguridad, nodos que nunca actualizan).
-- [x] Orquestador con backends dry-run y Warnet (upgrade en caliente vía
-      patch de imagen del pod).
-- [x] Generación de red sintética que replica la distribución real
-      (por versión desplegable major.minor, renormalizada, con cobertura
-      explícita).
-- [x] Validador: métricas de distancia sim-vs-real, veredicto y
-      recalibración con perfiles persistidos en JSON.
-- [ ] Primera calibración con sustancia contra Core 31.1 (requiere ~3-4
-      semanas de snapshots; en curso).
-- [ ] Primer deploy en Warnet y demo del dashboard.
-- [ ] Redes mixtas Core+Knots (Knots es hoy la 2ª implementación de
-      mainnet, >15% de los nodos; requiere construir la imagen).
-- [ ] Crawler propio (base: ayeowch/bitnodes, open source) para
-      independizar la telemetría.
-- [ ] Módulos futuros: mempool/fees, hashrate por pool, latencias.
+- **Telemetry:** ingests the public CSV datasets that bitnod.es publishes
+  ("Full Dataset Snapshots"), into SQLite. Continuous own series since
+  **May 2026** (~46k reachable nodes per snapshot). Runs automatically in
+  the cloud via GitHub Actions — no dependency on a local machine.
+- **Historical telemetry (2016–2019)** recovered from the Internet Archive
+  (a public dataset that had been lost when bitnodes.io expired on
+  2026-05-03).
+- **Adoption model** — calibratable (5 profiles, imitation effect, security
+  releases, never-updating nodes).
+- **Orchestrator** with dry-run and Warnet backends (hot upgrade via pod
+  image patch).
+- **Synthetic-network generation** replicating the real distribution (by
+  deployable major.minor version, renormalized, with explicit coverage).
+- **Validator:** sim-vs-real distance metrics, verdict, and recalibration
+  with profiles persisted to JSON.
+- **Multi-source auditing:** cross-checks telemetry sources and quantifies
+  how far public crawlers disagree.
+- Empirical results already produced: adoption of Core 0.16.3 (the
+  CVE-2018-17144 fix) reached ~39% of the network in 17 days vs ~90 days
+  for a routine release; a ~25% ceiling of nodes that never update.
 
-## Uso rápido
+Planned:
+
+- First substantive calibration against a release captured from day one by
+  our own telemetry.
+- First Warnet deploy and live dashboard demo.
+- Mixed Core+Knots networks (Knots is mainnet's 2nd implementation today,
+  ~18% of nodes; requires building the image).
+- Own crawler (based on the open-source `ayeowch/bitnodes`) to fully
+  independize telemetry.
+- Future modules: mempool/fees, hashrate by pool, latencies.
+
+## Quick start
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 cd twin
 
-python3 bitnodes_ingest.py ingest        # snapshot de mainnet -> SQLite
-python3 bitnodes_ingest.py report        # distribución actual
+python3 csv_ingest.py ingest              # mainnet snapshot -> SQLite
+python3 csv_ingest.py report              # current distribution
+python3 build_dashboard.py --out ../docs/index.html   # regenerate dashboard
 python3 orchestrator.py gen-network --nodes 20 --out ../networks/network.yaml
 python3 orchestrator.py run --nodes 20 --new-version 31.1 --backend dry-run
 python3 validator.py calibrate --version 31.1 --out profiles.json
 python3 validator.py compare --sim adoption_sim.csv --version 31.1
 ```
 
-Con un cluster Warnet (Minikube / Docker Desktop): deployar el
-network.yaml generado y correr con `--backend warnet` para ver los
-upgrades en vivo en el dashboard.
+With a Warnet cluster (Minikube / Docker Desktop): deploy the generated
+`network.yaml` and run with `--backend warnet` to watch upgrades live.
 
-## Telemetría continua
+## Continuous telemetry
 
-Un snapshot diario alcanza (idempotente; bitnod.es no expone API, se
-parsea su tabla pública con un request por corrida). En WSL, la opción
-confiable es el Programador de tareas de Windows:
+Telemetry updates automatically via GitHub Actions
+(`.github/workflows/update-dashboard.yml`): it ingests the latest published
+CSV, regenerates the dashboard, and commits the result. GitHub Pages serves
+the updated dashboard. The CSV datasets are published roughly weekly; the
+daily workflow is idempotent (dates without a new file are skipped).
 
+To backfill historical CSVs:
+
+```bash
+python3 csv_ingest.py backfill --since 2026-05-21 --step 1
 ```
-wsl -d Ubuntu -- bash -c "cd ~/projects/bitcoin-twin/twin && python3 bitnodes_ingest.py ingest >> ../data/ingest.log 2>&1"
-```
 
-## Licencia
+## License
 
-MIT. Construido sobre Warnet (MIT) y Bitcoin Core (MIT).
+MIT. Built on Warnet (MIT) and Bitcoin Core (MIT).
+
 ## Data sources & attribution
 
 This project consumes public network telemetry from several sources. Each
 is used in good faith, for open-source research, with attribution:
 
-- **Node telemetry — bitnod.es.** Reachable-node data (public IP addresses
-  and user agents observed on Bitcoin's public P2P network). These are
-  observations of a public network; the underlying facts are not
-  copyrightable. Accessed respectfully at roughly one request per day. A
-  planned milestone is to run our own crawler (based on the open-source
-  [`ayeowch/bitnodes`](https://github.com/ayeowch/bitnodes)) to obtain this
-  data first-hand and remove any third-party dependency.
+- **Node telemetry — bitnod.es (BitMEX Research / Localhost Research).**
+  The project downloads the public **CSV dataset snapshots** that bitnod.es
+  publishes for download ("Full Dataset Snapshots"), rather than scraping
+  the site. These datasets are observations of Bitcoin's public P2P network
+  (public IP addresses and user agents); the underlying facts are not
+  copyrightable, and the project builds its own derived historical series
+  rather than mirroring the source's database. A planned milestone is to
+  run our own crawler (based on the open-source
+  [`ayeowch/bitnodes`](https://github.com/ayeowch/bitnodes), MIT) to obtain
+  this data first-hand and remove any third-party dependency.
 
 - **Version-distribution data — DSN Bitcoin Monitoring (KIT),** via
   [`bitcoin-data/bitcoin-stats-archive`](https://github.com/bitcoin-data/bitcoin-stats-archive)
   (branch `dsn-bitcoin-monitoring`). Licensed **CC BY 4.0** — used here with
-  attribution, as the license requires.
+  attribution, as the license requires. Used for source auditing.
 
 - **Historical node distribution (2016–2019) — Internet Archive.**
   Reconstructed from public web captures of earlier Bitnodes eras
@@ -113,7 +133,6 @@ is used in good faith, for open-source research, with attribution:
   [Wayback Machine](https://web.archive.org/). Used for non-commercial
   research; recovered datasets are committed to this repository.
 
-This project is open-source (MIT). Data derived from CC BY 4.0 sources
-retains that attribution requirement. If you are a data source maintainer
-and have any concern about how your data is used here, please open an
-issue.
+Data derived from CC BY 4.0 sources retains that attribution requirement.
+If you are a data source maintainer and have any concern about how your
+data is used here, please open an issue.
