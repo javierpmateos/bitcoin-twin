@@ -55,8 +55,9 @@ validator
 - **Multi-source auditing:** cross-checks telemetry sources and quantifies
   how far public crawlers disagree.
 - Empirical results already produced: adoption of Core 0.16.3 (the
-  CVE-2018-17144 fix) reached ~39% of the network in 17 days vs ~90 days
-  for a routine release; a ~25% ceiling of nodes that never update.
+  CVE-2018-17144 fix) reached ~39% of observed nodes in 17 days vs ~90 days
+  for a routine release; months later, ~25% of observed nodes were still
+  running outdated versions.
 
 Planned:
 
