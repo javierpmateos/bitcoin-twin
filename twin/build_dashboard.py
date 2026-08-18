@@ -482,22 +482,41 @@ function agg(sn){
 function mmKey(mm){ const p = mm.split("."); return [parseInt(p[0])||0, parseInt(p[1])||0]; }
 
 // Cola larga: core con major <= newestMajor-3, o 0.x
+//
+// "newest" NO es el máximo: unos pocos nodos reportan user agents con
+// versiones inexistentes (p. ej. 77.0.0, vistos en 2 nodos de ~47k) y el
+// máximo crudo los tomaría como la versión actual, marcando toda la red
+// como obsoleta. Se usa la versión mayor más nueva con presencia
+// significativa (>=1% de los nodos Core), que es robusta a datos basura
+// y a los builds de desarrollo (.99).
 function staleOf(sn){
-  let stale = 0, coreTot = 0, newest = 0;
+  let coreTot = 0;
+  const byMajor = {};
   for (const [idx,n] of sn.c){
     const v = VK[idx];
     if (v.implBase !== "core") continue;
-    const M = mmKey(v.mm)[0];
-    if (mmKey(v.mm)[1] !== 99) newest = Math.max(newest, M);
     coreTot += n;
+    const [M, mi] = mmKey(v.mm);
+    if (mi === 99) continue;                  // builds de desarrollo
+    byMajor[M] = (byMajor[M]||0) + n;
   }
+  if (!coreTot) return { stale:0, pct:0, newest:0 };
+  const thresh = coreTot * 0.01;              // 1% de los nodos Core
+  let newest = 0;
+  for (const M in byMajor){
+    if (byMajor[M] >= thresh) newest = Math.max(newest, parseInt(M));
+  }
+  if (!newest){                                // fallback defensivo
+    for (const M in byMajor) newest = Math.max(newest, parseInt(M));
+  }
+  let stale = 0;
   for (const [idx,n] of sn.c){
     const v = VK[idx];
     if (v.implBase !== "core") continue;
     const M = mmKey(v.mm)[0];
     if (M === 0 || M < newest - 2) stale += n;
   }
-  return { stale, pct: coreTot ? 100*stale/coreTot : 0 };
+  return { stale, pct: coreTot ? 100*stale/coreTot : 0, newest };
 }
 
 function shareOfVersion(sn, label){
