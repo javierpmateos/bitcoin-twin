@@ -136,3 +136,23 @@ is used in good faith, for open-source research, with attribution:
 Data derived from CC BY 4.0 sources retains that attribution requirement.
 If you are a data source maintainer and have any concern about how your
 data is used here, please open an issue.
+## A note on the archived captures
+
+The files in `twin/wayback_raw/` are verbatim copies of public web pages
+preserved by the Internet Archive, committed here so that the parsing of the
+2016–2019 historical dataset is fully reproducible: anyone can re-run the
+parser against the exact bytes it was developed against, or fetch the same
+captures independently from
+[web.archive.org](https://web.archive.org/).
+
+Those captures include node IP addresses that were publicly announced on
+Bitcoin's peer-to-peer network and published on a public website between
+2016 and 2019. They are reproduced here unmodified because altering an
+archival source would defeat its purpose, and because the same captures
+remain publicly retrievable from the Internet Archive regardless.
+
+**This project's own database stores no IP addresses.** The ingest pipeline
+reads public dataset snapshots and retains only aggregate counts per client
+version (`telemetry.db` contains `ts, total_nodes, source` and
+`ts, impl, version, count` — nothing else). No addresses, hosts, or
+per-node records are ingested or published by this project.
