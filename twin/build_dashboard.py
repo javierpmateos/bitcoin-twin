@@ -210,9 +210,18 @@ TEMPLATE = r"""<!DOCTYPE html>
   td.num{text-align:right;font-variant-numeric:tabular-nums}
   .foot{color:var(--muted);font-size:11px;margin-top:40px;max-width:80ch}
   .hint{font-size:10px;color:var(--muted);margin-top:6px;font-style:italic}
-  .localctrl{display:flex;align-items:flex-start;gap:10px;margin:-4px 0 14px;
+  .localctrl{display:flex;align-items:flex-start;gap:10px;margin:-4px 0 16px;
     flex-wrap:wrap}
-  .localctrl .clabel{padding-top:6px}
+  .localctrl .clabel{padding-top:6px;white-space:nowrap}
+  .verchips{display:flex;flex-wrap:wrap;gap:6px;flex:1;min-width:240px}
+  .verchips .chip{font-size:10.5px;padding:3px 9px}
+  .verchips .chip.on{background:var(--line);color:var(--ink)}
+  .chip.ghost{opacity:.6}
+  .empty{color:var(--muted);font-size:12px;padding:34px 0 10px;
+    text-align:center;border:1px dashed var(--line);border-radius:8px;
+    margin-top:4px}
+  .zoomhint{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
+    display:flex;align-items:center;gap:6px}
   .globallabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--signal);opacity:.75;margin-right:4px}
 </style>
@@ -251,7 +260,7 @@ TEMPLATE = r"""<!DOCTYPE html>
     </div>
     <button class="reset" id="resetBtn" data-i18n="ctrlReset">reset</button>
   </div>
-  <div class="hint" data-i18n="hintZoom">Scroll to zoom on charts · drag to pan · double-click to reset zoom</div>
+  <div class="hint" data-i18n="hintZoom">🖱 Mouse wheel over any chart = zoom in/out · drag = pan sideways · double-click = reset</div>
 
   <!-- BIP-110 -->
   <section>
@@ -283,11 +292,12 @@ TEMPLATE = r"""<!DOCTYPE html>
   <section id="verSection">
     <h2 data-i18n="verHead">Version comparison over time</h2>
     <div class="localctrl">
-      <span class="clabel" data-i18n="ctrlVersions">Compare versions</span>
-      <select id="verSelect" multiple size="5" title="Ctrl/Cmd + click for multiple"></select>
-      <button class="chip" id="verClear" data-i18n="ctrlClear">clear</button>
+      <span class="clabel" data-i18n="ctrlVersions">Pick versions</span>
+      <div class="verchips" id="verChips"></div>
+      <button class="chip ghost" id="verClear" data-i18n="ctrlClear">clear</button>
     </div>
-    <div class="chartbox"><canvas id="verChart"></canvas></div>
+    <div class="chartbox" id="verBox"><canvas id="verChart"></canvas></div>
+    <div class="empty" id="verEmpty" data-i18n="verEmpty">Pick one or more versions above to plot their share over time.</div>
     <p class="note" data-i18n="verNote">Select versions above to plot their share over time. Useful for watching a new release propagate while older ones decay. The global date range applies here too.</p>
   </section>
 
@@ -335,9 +345,9 @@ const I18N = {
     title:"Telemetry & adoption panel",
     subtitle:"Synthetic replica calibrated against the live network · open data",
     ctrlRange:"Range", ctrlAll:"All", ctrlImpl:"Implementation",
-    ctrlOther:"Other", ctrlVersions:"Compare versions", ctrlReset:"reset",
-    ctrlGlobal:"Global", ctrlClear:"clear",
-    hintZoom:"Scroll to zoom on charts · drag to pan · double-click to reset zoom",
+    ctrlOther:"Other", ctrlVersions:"Pick versions", ctrlReset:"reset",
+    ctrlGlobal:"Global filters", ctrlClear:"clear",
+    hintZoom:"🖱 Mouse wheel over any chart = zoom in/out · drag = pan sideways · double-click = reset",
     bipHead:"BIP-110 signaling · UASF",
     bipWindow:"Flag-day window · August 2026",
     bipCaption:"of observed nodes run BIP-110 signaling software",
@@ -349,8 +359,10 @@ const I18N = {
     statKnots:"Knots", statVersions:"distinct versions",
     distNote:"Top {n} deployable versions (major.minor) in the selected snapshot.",
     verHead:"Version comparison over time",
+    ctrlPick:"Pick versions",
+    verEmpty:"Pick one or more versions above to plot their share over time.",
     verNote:"Select versions above to plot their share over time. Useful for watching a new release propagate while older ones decay. The global date range applies here too.",
-    verEmpty:"No versions selected — pick some in the control bar above.",
+    verEmpty:"Pick one or more versions above to plot their share over time.",
     evoHead:"Network evolution",
     evoNote:"Observed nodes by implementation, one point per day.",
     ckHead:"Implementation share over time",
@@ -372,9 +384,9 @@ const I18N = {
     title:"Panel de telemetría y adopción",
     subtitle:"Réplica sintética calibrada contra la red real · datos abiertos",
     ctrlRange:"Rango", ctrlAll:"Todo", ctrlImpl:"Implementación",
-    ctrlOther:"Otros", ctrlVersions:"Comparar versiones", ctrlReset:"reiniciar",
-    ctrlGlobal:"Global", ctrlClear:"limpiar",
-    hintZoom:"Rueda para zoom · arrastrar para desplazar · doble clic para reiniciar",
+    ctrlOther:"Otros", ctrlVersions:"Elegir versiones", ctrlReset:"reiniciar",
+    ctrlGlobal:"Filtros globales", ctrlClear:"limpiar",
+    hintZoom:"🖱 Rueda del mouse sobre cualquier gráfico = acercar/alejar · arrastrar = desplazar · doble clic = reiniciar",
     bipHead:"Señalización BIP-110 · UASF",
     bipWindow:"Ventana de flag day · agosto 2026",
     bipCaption:"de los nodos observados corre software que señaliza BIP-110",
@@ -386,6 +398,8 @@ const I18N = {
     statKnots:"Knots", statVersions:"versiones distintas",
     distNote:"Top {n} versiones desplegables (major.minor) en el snapshot seleccionado.",
     verHead:"Comparación de versiones en el tiempo",
+    ctrlPick:"Elegir versiones",
+    verEmpty:"Elegí una o más versiones arriba para graficar su cuota en el tiempo.",
     verNote:"Elegí versiones acá arriba para graficar su cuota en el tiempo. Útil para ver propagarse un release nuevo mientras los viejos decaen. El rango global también aplica.",
     verEmpty:"Ninguna versión seleccionada — elegí algunas en la barra de arriba.",
     evoHead:"Evolución de la red",
@@ -576,7 +590,11 @@ function rebuild(){
   // --- comparación de versiones ---
   const palette = [col('--core'),col('--knots'),col('--signal'),'#3fb950','#db6d28','#a371f7'];
   const sel = [...state.versions];
+  const vBox = document.getElementById('verBox');
+  const vEmpty = document.getElementById('verEmpty');
   if (sel.length){
+    if (vBox) vBox.style.display = '';
+    if (vEmpty) vEmpty.style.display = 'none';
     charts.ver = mk('verChart', { type:'line',
       data:{ labels, datasets: sel.map((lab,i)=>({
         label: lab, borderColor: palette[i%palette.length],
@@ -588,9 +606,9 @@ function rebuild(){
              ticks:{callback:v=>v+'%'},
              title:{display:true,text:t.axisShare}} } }) });
   } else {
-    const el = document.getElementById('verChart');
-    if (el && el.getContext){ const ctx = el.getContext('2d');
-      ctx.clearRect(0,0,el.width,el.height); }
+    // sin selección: ocultar el canvas (evita un hueco vacío) y mostrar aviso
+    if (vBox) vBox.style.display = 'none';
+    if (vEmpty) vEmpty.style.display = '';
   }
 
   // --- evolución por implementación ---
@@ -663,27 +681,29 @@ function applyLang(lang){
 
 // ---- controles ------------------------------------------------------------
 function initControls(){
-  // versiones disponibles (por label, ordenadas por presencia en el último snap)
+  // Chips de versión: las 14 más presentes en el último snapshot.
   const lastSnap = D.series.snaps[D.series.snaps.length-1];
   const tally = {};
   if (lastSnap) for (const [idx,n] of lastSnap.c){
     const v = VK[idx]; tally[v.label] = (tally[v.label]||0)+n;
   }
-  const opts = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,25);
-  const sel = document.getElementById('verSelect');
-  sel.size = 4;   // lista visible: multi-selección con ctrl/cmd+clic
+  const opts = Object.entries(tally).sort((a,b)=>b[1]-a[1]).slice(0,14);
+  const box = document.getElementById('verChips');
   opts.forEach(([lab])=>{
-    const o = document.createElement('option'); o.value=lab; o.textContent=lab;
-    sel.appendChild(o);
-  });
-  sel.addEventListener('change', ()=>{
-    state.versions = new Set([...sel.selectedOptions].map(o=>o.value));
-    rebuild();
+    const b = document.createElement('button');
+    b.className = 'chip ver'; b.textContent = lab; b.dataset.ver = lab;
+    b.addEventListener('click', ()=>{
+      if (state.versions.has(lab)){ state.versions.delete(lab); b.classList.remove('on'); }
+      else { state.versions.add(lab); b.classList.add('on'); }
+      rebuild();
+    });
+    box.appendChild(b);
   });
   const clr = document.getElementById('verClear');
   if (clr) clr.addEventListener('click', ()=>{
-    [...sel.options].forEach(o=>o.selected=false);
-    state.versions = new Set(); rebuild();
+    state.versions = new Set();
+    document.querySelectorAll('.chip.ver').forEach(x=>x.classList.remove('on'));
+    rebuild();
   });
   document.querySelectorAll('.chip.range').forEach(b=>{
     b.addEventListener('click', ()=>{
@@ -706,7 +726,7 @@ function initControls(){
     state.versions = new Set();
     document.querySelectorAll('.chip.range').forEach(x=>x.classList.toggle('on', x.dataset.days==="0"));
     document.querySelectorAll('.chip.impl').forEach(x=>x.classList.add('on'));
-    [...sel.options].forEach(o=>o.selected=false);
+    document.querySelectorAll('.chip.ver').forEach(x=>x.classList.remove('on'));
     Object.values(charts).forEach(c=>{ if(c&&c.resetZoom) try{c.resetZoom();}catch(e){} });
     rebuild();
   });
