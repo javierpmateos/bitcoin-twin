@@ -222,6 +222,18 @@ TEMPLATE = r"""<!DOCTYPE html>
     margin-top:4px}
   .zoomhint{font-size:10px;color:var(--muted);opacity:.7;margin-top:8px;
     display:flex;align-items:center;gap:6px}
+  .statusgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));
+    gap:22px}
+  .stlabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+    margin-bottom:8px;font-weight:600}
+  .stlabel.done{color:#3fb950} .stlabel.wip{color:var(--signal)}
+  .stlabel.todo{color:var(--muted)}
+  .stlist{list-style:none;padding:0;margin:0;font-size:12px;color:var(--muted)}
+  .stlist li{padding:3px 0 3px 16px;position:relative;line-height:1.45}
+  .stlist li::before{position:absolute;left:0;top:3px}
+  .stDone li::before{content:"✓";color:#3fb950}
+  .stWip li::before{content:"◐";color:var(--signal)}
+  .stTodo li::before{content:"○";color:var(--muted)}
   .globallabel{font-size:10px;letter-spacing:.1em;text-transform:uppercase;
     color:var(--signal);opacity:.75;margin-right:4px}
 </style>
@@ -237,7 +249,7 @@ TEMPLATE = r"""<!DOCTYPE html>
       </div>
     </div>
     <h1 data-i18n="title">Telemetry &amp; adoption panel</h1>
-    <div class="sub" data-i18n="subtitle">Synthetic replica calibrated against the live network · open data</div>
+    <div class="sub" data-i18n="subtitle">Telemetry layer of an open Bitcoin network twin · observed data, not a census</div>
     <div class="stamp" id="stamp"></div>
   </header>
 
@@ -336,6 +348,26 @@ TEMPLATE = r"""<!DOCTYPE html>
     <p class="note" data-i18n="histNote">Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.</p>
   </section>
 
+  <!-- Estado del proyecto -->
+  <section>
+    <h2 data-i18n="statusHead">Project status</h2>
+    <div class="statusgrid">
+      <div>
+        <div class="stlabel done" data-i18n="stDone">Implemented</div>
+        <ul class="stlist" id="stDoneList"></ul>
+      </div>
+      <div>
+        <div class="stlabel wip" data-i18n="stWip">Experimental</div>
+        <ul class="stlist" id="stWipList"></ul>
+      </div>
+      <div>
+        <div class="stlabel todo" data-i18n="stTodo">Planned</div>
+        <ul class="stlist" id="stTodoList"></ul>
+      </div>
+    </div>
+    <p class="note" data-i18n="statusNote">This page is the telemetry layer. The synthetic-network side of the project is under active development — listed honestly above rather than implied.</p>
+  </section>
+
   <div class="foot" id="foot"></div>
 </div>
 
@@ -343,7 +375,7 @@ TEMPLATE = r"""<!DOCTYPE html>
 const I18N = {
   en: {
     title:"Telemetry & adoption panel",
-    subtitle:"Synthetic replica calibrated against the live network · open data",
+    subtitle:"Telemetry layer of an open Bitcoin network twin · observed data, not a census",
     ctrlRange:"Range", ctrlAll:"All", ctrlImpl:"Implementation",
     ctrlOther:"Other", ctrlVersions:"Pick versions", ctrlReset:"reset",
     ctrlGlobal:"Global filters", ctrlClear:"clear",
@@ -374,6 +406,12 @@ const I18N = {
     srcCols:["source","date","nodes seen"],
     histHead:"Recovered history · 2016–2019",
     histNote:"Observed network size reconstructed from Internet Archive captures (bitnodes.21.co and earn.com eras), a dataset that had become inaccessible.",
+    statusHead:"Project status",
+    stDone:"Implemented", stWip:"Experimental", stTodo:"Planned",
+    statusNote:"This page is the telemetry layer. The synthetic-network side of the project is under active development — listed honestly above rather than implied.",
+    listDone:["Automated telemetry ingest (public CSV datasets)","Continuous own series since May 2026","Historical recovery 2016–2019 (Internet Archive)","Synthetic-network generation from real distribution","Multi-source auditing","This dashboard, self-updating in CI"],
+    listWip:["Adoption model (hazard, 5 profiles, imitation)","Calibration against historical release curves","Agent simulation (dry-run backend)","Validator: sim-vs-real distance metrics"],
+    listTodo:["Live Warnet deployment at scale","Mixed Core + Knots synthetic networks","Self-hosted crawler (independent telemetry)","Modules: mempool/fees, propagation, hashrate"],
     generated:"Generated", source:"source",
     axisSignaling:"signaling nodes", axisStale:"outdated nodes",
     axisShare:"share of observed nodes",
@@ -382,7 +420,7 @@ const I18N = {
   },
   es: {
     title:"Panel de telemetría y adopción",
-    subtitle:"Réplica sintética calibrada contra la red real · datos abiertos",
+    subtitle:"Capa de telemetría de un gemelo abierto de la red Bitcoin · datos observados, no un censo",
     ctrlRange:"Rango", ctrlAll:"Todo", ctrlImpl:"Implementación",
     ctrlOther:"Otros", ctrlVersions:"Elegir versiones", ctrlReset:"reiniciar",
     ctrlGlobal:"Filtros globales", ctrlClear:"limpiar",
@@ -413,6 +451,12 @@ const I18N = {
     srcCols:["fuente","fecha","nodos vistos"],
     histHead:"Historia rescatada · 2016–2019",
     histNote:"Tamaño observado de la red reconstruido desde capturas del Internet Archive (eras bitnodes.21.co y earn.com), un dataset que se había vuelto inaccesible.",
+    statusHead:"Estado del proyecto",
+    stDone:"Implementado", stWip:"Experimental", stTodo:"Planeado",
+    statusNote:"Esta página es la capa de telemetría. La parte de red sintética está en desarrollo activo — listada honestamente arriba en vez de dada por hecha.",
+    listDone:["Ingesta automática de telemetría (datasets CSV públicos)","Serie propia continua desde mayo 2026","Recuperación histórica 2016–2019 (Internet Archive)","Generación de red sintética desde la distribución real","Auditoría multi-fuente","Este panel, autoactualizado en CI"],
+    listWip:["Modelo de adopción (hazard, 5 perfiles, imitación)","Calibración contra curvas históricas de releases","Simulación de agentes (backend dry-run)","Validador: métricas de distancia sim-vs-real"],
+    listTodo:["Deploy de Warnet a escala","Redes sintéticas mixtas Core + Knots","Crawler propio (telemetría independiente)","Módulos: mempool/fees, propagación, hashrate"],
     generated:"Generado", source:"fuente",
     axisSignaling:"nodos señalizando", axisStale:"nodos desactualizados",
     axisShare:"cuota de nodos observados",
@@ -692,6 +736,15 @@ function applyLang(lang){
     html += '<tr><td>'+k+'</td><td>'+v.ts+'</td><td class="num">'+fmt(v.total)+'</td></tr>';
   });
   sw.innerHTML = html + '</tbody></table>';
+  // listas de estado del proyecto
+  [['stDoneList', t.listDone, 'stDone'],
+   ['stWipList',  t.listWip,  'stWip'],
+   ['stTodoList', t.listTodo, 'stTodo']].forEach(([id, items, cls])=>{
+    const ul = document.getElementById(id);
+    if (!ul || !items) return;
+    ul.className = 'stlist ' + cls;
+    ul.innerHTML = items.map(x => '<li>' + x + '</li>').join('');
+  });
   document.getElementById('foot').textContent = t.foot.replace('{d}', D.generated);
   document.querySelectorAll('#langToggle button').forEach(b=>{
     b.classList.toggle('active', b.dataset.lang===lang); });
