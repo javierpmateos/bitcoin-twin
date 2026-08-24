@@ -188,8 +188,8 @@ def main() -> None:
                    "profiles": [asdict(p) for p in fitted]}, fh, indent=2)
     print(f"\nPerfiles -> {args.out}")
 
-    cf_label = ("sin urgencia de CVE" if is_security
-                else "si hubiera sido crítico")
+    cf_label = ("no CVE urgency" if is_security
+                else "if it had been critical")
     # Contrafáctico: el mismo ecosistema sin la urgencia del CVE.
     horizon = int(days.max()) + 1
     curve_real = expected_curve(fitted, horizon, is_security)
@@ -205,14 +205,14 @@ def main() -> None:
         import matplotlib.pyplot as plt
         fig, ax = plt.subplots(figsize=(9.5, 5.5))
         ax.plot(curve_real, lw=2, color="tab:blue",
-                label="modelo calibrado")
+                label="calibrated model")
         ax.plot(curve_cf, lw=1.5, ls="--", color="tab:gray",
-                label=f"contrafáctico: {cf_label}")
+                label=f"counterfactual: {cf_label}")
         ax.plot(days, frac, "ko", ms=6,
-                label="datos reales (Wayback Machine)")
-        ax.set_xlabel("días desde el release")
-        ax.set_ylabel("fracción de la red con versión >= objetivo")
-        ax.set_title(f"Adopción real de Bitcoin Core {args.version} "
+                label="observed data (Internet Archive)")
+        ax.set_xlabel("days since release")
+        ax.set_ylabel("share of observed nodes on version >= target")
+        ax.set_title(f"Observed adoption of Bitcoin Core {args.version} "
                      f"({args.release_date})")
         ax.legend(); ax.grid(alpha=0.3); fig.tight_layout()
         fig.savefig(args.plot, dpi=150)
