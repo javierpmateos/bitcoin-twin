@@ -61,21 +61,40 @@ def http_bytes(url: str) -> bytes:
         return r.read()
 
 
-def parse_csv(text: str) -> tuple[dict, str]:
-    """Devuelve (conteos_por_(impl,version), fecha_mayoritaria_del_csv)."""
+WINDOW_DAYS = 7
+
+
+def parse_csv(text: str, window_days: int = WINDOW_DAYS) -> tuple[dict, str, int]:
+    """
+    Devuelve (conteos_por_(impl,version), fecha_del_snapshot, filas_totales).
+
+    IMPORTANTE: los CSV de bitnod.es son ACUMULADOS — cada fila trae el
+    export_date en que ese nodo se vio por última vez, y el archivo arrastra
+    nodos vistos hace meses. Contar todas las filas mide el tamaño del
+    archivo, no la red. Por eso sólo se cuentan los nodos vistos dentro de
+    una ventana de `window_days` días que termina en la fecha más reciente
+    del archivo. 7 días cubre un ciclo completo del crawler y es estable
+    mes a mes; ventanas de 1-3 días agarran ciclos a medias.
+    """
+    rows = list(csv.DictReader(io.StringIO(text)))
+    def _d(r):
+        try:
+            return datetime.strptime(r.get("export_date", ""), "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    dated = [(r, _d(r)) for r in rows]
+    valid = [d for _, d in dated if d]
+    if not valid:
+        return {}, "", len(rows)
+    last = max(valid)
+    cutoff = last - timedelta(days=window_days - 1)
     counts: dict[tuple[str, str], int] = {}
-    dates: dict[str, int] = {}
-    reader = csv.DictReader(io.StringIO(text))
-    for row in reader:
-        ua = row.get("user_agent", "")
-        key = parse_user_agent(ua)
+    for r, d in dated:
+        if d is None or d < cutoff:
+            continue
+        key = parse_user_agent(r.get("user_agent", ""))
         counts[key] = counts.get(key, 0) + 1
-        d = row.get("export_date", "")
-        if d:
-            dates[d] = dates.get(d, 0) + 1
-    # fecha representativa: la más frecuente en el archivo
-    csv_date = max(dates, key=dates.get) if dates else ""
-    return counts, csv_date
+    return counts, last.strftime("%Y-%m-%d"), len(rows)
 
 
 def store(con, ts: int, total: int, counts: dict, source: str) -> bool:
@@ -119,7 +138,7 @@ def ingest_one(con, date_str: str, local_file: str | None) -> None:
             raise
         origen = url
 
-    counts, csv_date = parse_csv(text)
+    counts, csv_date, n_rows = parse_csv(text)
     if not counts:
         print(f"  {date_str}: CSV vacío o ilegible")
         return
@@ -129,7 +148,8 @@ def ingest_one(con, date_str: str, local_file: str | None) -> None:
     total = sum(counts.values())
     nuevo = store(con, ts, total, counts, SOURCE)
     estado = "guardado" if nuevo else "ya existía"
-    print(f"  {eff_date}: {total} nodos, {len(counts)} versiones "
+    print(f"  {eff_date}: {total} nodos en ventana {WINDOW_DAYS}d "
+          f"(de {n_rows} filas acumuladas), {len(counts)} versiones "
           f"-> {estado}  [{origen.split('/')[-1]}]")
 
 
@@ -154,6 +174,20 @@ def cmd_backfill(args) -> None:
         day += timedelta(days=args.step)
         got += 1
     print(f"Backfill terminado ({got} fechas intentadas).")
+
+
+def cmd_rebuild(args) -> None:
+    """Borra la serie de esta fuente y la re-ingiere con la ventana."""
+    con = db_connect(args.db)
+    n = con.execute("SELECT COUNT(*) FROM snapshots WHERE source=?",
+                    (SOURCE,)).fetchone()[0]
+    con.execute("DELETE FROM version_counts WHERE ts IN "
+                "(SELECT ts FROM snapshots WHERE source=?)", (SOURCE,))
+    con.execute("DELETE FROM snapshots WHERE source=?", (SOURCE,))
+    con.commit()
+    print(f"Borrados {n} snapshots acumulados de '{SOURCE}'. Re-ingiriendo "
+          f"con ventana de {WINDOW_DAYS} días...")
+    cmd_backfill(args)
 
 
 def cmd_report(args) -> None:
@@ -190,6 +224,12 @@ def main() -> None:
     p.add_argument("--step", type=int, default=1,
                    help="paso en días (default 1; los 404 se saltean)")
     p.set_defaults(func=cmd_backfill)
+
+    p = sub.add_parser("rebuild",
+                       help="borrar la serie acumulada y re-ingerir con ventana")
+    p.add_argument("--since", default="2026-05-20")
+    p.add_argument("--step", type=int, default=1)
+    p.set_defaults(func=cmd_rebuild)
 
     p = sub.add_parser("report", help="último snapshot CSV")
     p.set_defaults(func=cmd_report)
