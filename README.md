@@ -39,7 +39,7 @@ validator
 
 - **Telemetry:** ingests the public CSV datasets that bitnod.es publishes
   ("Full Dataset Snapshots"), into SQLite. Continuous own series since
-  **May 2026** (~46k reachable nodes per snapshot). Runs automatically in
+  **May 2026** (~25–30k nodes seen per 7-day window; the public CSVs are cumulative, so only nodes seen in the last 7 days are counted). Runs automatically in
   the cloud via GitHub Actions — no dependency on a local machine.
 - **Historical telemetry (2016–2019)** recovered from the Internet Archive
   (a public dataset that had been lost when bitnodes.io expired on
